@@ -1,21 +1,47 @@
+/* style.css (Versão Corrigida) */
+
+/* Reinicialização universal estrita */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    /* Impedir rolagem forçadamente */
+    overflow: hidden; 
+}
+
 body {
     font-family: Arial, sans-serif;
     background-color: #f0f0f0;
     text-align: center;
-    margin: 0;
-    padding: 20px;
-    display: flex; /* Adiciona flexbox para centralizar */
+    
+    /* Configuração Flexbox para centralização */
+    display: flex; 
     flex-direction: column;
     align-items: center; /* Centraliza horizontalmente */
-    justify-content: center; /* Centraliza verticalmente se o body tiver altura suficiente */
-    min-height: 100vh; /* Garante que o body ocupe a altura total da viewport */
+    
+    /* Centraliza o conteúdo (header e canvas) verticalmente na tela */
+    justify-content: center; 
+}
+
+/* Estiliza o cabeçalho, mas sem margem externa que cause overflow */
+#header {
+    margin-bottom: 15px; /* Espaço entre o texto e o canvas */
 }
 
 h1, p {
     color: #333;
+    /* Margens menores ou zeradas para evitar estouro */
+    margin: 5px 0; 
 }
 
 #gameCanvas {
-    background-color: #333; /* Fundo mais escuro para contrastar com tiles claros */
+    background-color: #333; 
     border: 2px solid #000000;
+    /* Garante que o canvas não seja "esticado" pelo flexbox */
+    flex-shrink: 0; 
 }

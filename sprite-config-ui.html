@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Calibrator - Ajuste por Frame</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        #controls {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 15px;
+        }
+        .control-group {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="number"], select, button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-top: 5px;
+        }
+        button {
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #output {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        #originalCanvas {
+            border: 2px solid #333;
+            background-color: #000;
+            max-height: 500px; 
+        }
+        #animationCanvas {
+            border: 2px solid #333;
+            background-color: #eee;
+            width: 200px; 
+            height: 200px;
+        }
+        #results {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        #frameControls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .checkbox-group {
+            grid-column: span 4; /* Ocupa a linha toda */
+            padding: 10px;
+            background-color: #f0f8ff;
+            border: 1px solid #007bff;
+        }
+        .checkbox-group label {
+            display: inline;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Sprite Calibrator - Ajuste por Frame</h1>
+    <p>Ajuste as coordenadas de corte (Src X e Src Y) para cada frame. Use o zoom de 3x da SpriteSheet para maior precisão.</p>
+
+    <div id="controls">
+        <div class="control-group">
+            <label for="spriteSelect">1. Selecionar Sprite</label>
+            <select id="spriteSelect">
+                <option value="Walk_Down-Sheet.png" selected>Walk_Down-Sheet.png</option> 
+                <option value="Walk_Up-Sheet.png">Walk_Up-Sheet.png</option>
+                <option value="Walk_Side-Sheet.png">Walk_Side-Sheet.png</option>
+                <option value="Idle_Down-Sheet.png">Idle_Down-Sheet.png</option>
+                <option value="Idle_Side-Sheet.png">Idle_Side-Sheet.png</option>
+                <option value="Idle_Up-Sheet.png">Idle_Up-Sheet.png</option>
+                </select>
+        </div>
+
+        <div class="control-group">
+            <label for="frameWidth">2. Largura de Corte (W)</label>
+            <input type="number" id="frameWidth" value="16" min="1" oninput="initFrames()">
+        </div>
+
+        <div class="control-group">
+            <label for="frameHeight">3. Altura de Corte (H)</label>
+            <input type="number" id="frameHeight" value="34" min="1" oninput="initFrames()">
+        </div>
+        
+        <div class="control-group">
+            <label for="numFrames">4. Número Total de Frames</label>
+            <input type="number" id="numFrames" value="6" min="1" oninput="initFrames()">
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="flipHorizontal" onchange="updateAnimation()">
+            <label for="flipHorizontal">**Inverter Horizontalmente (Left Side)**</label>
+            <span style="font-size: 0.9em; color: #555;">(Use apenas para Walk_Side.png ou Idle_Side.png)</span>
+        </div>
+
+        <div class="control-group" style="grid-column: span 2;">
+            <label>5. Navegação e Ajuste do Frame Atual</label>
+            <div id="frameControls">
+                <button onclick="prevFrame()"> &lt; Anterior </button>
+                <button onclick="nextFrame()"> Próximo &gt; </button>
+                <button onclick="toggleAnimate()"> Ligar/Desligar Animação </button>
+            </div>
+            <p style="margin-top: 10px;">Frame Atual: <span id="currentFrameDisplay">0</span></p>
+        </div>
+        
+        <div class="control-group">
+            <label for="srcXInput">Src X (Origem de Corte X)</label>
+            <input type="number" id="srcXInput" value="24" oninput="updateCurrentFrameCoords()">
+        </div>
+
+        <div class="control-group">
+            <label for="srcYInput">Src Y (Origem de Corte Y)</label>
+            <input type="number" id="srcYInput" value="17" oninput="updateCurrentFrameCoords()">
+        </div>
+    </div>
+
+    <div id="output">
+        <div id="animationContainer">
+            <h3>Visualização da Animação</h3>
+            <canvas id="animationCanvas"></canvas>
+            <p>Escala: 
+                <select id="drawScale" onchange="updateAnimation()">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="4" selected>4x</option>
+                    <option value="8">8x</option>
+                </select>
+            </p>
+            <p>Velocidade (FPS): 
+                <input type="number" id="fps" value="10" min="1" oninput="updateAnimation()" style="width: 50px;">
+            </p>
+        </div>
+        
+        <div id="results">
+            <h3>Parâmetros Ideais para `game.js`</h3>
+            <p>Copie e cole este array no **dicionário de frames** no seu `game.js`:</p>
+            <pre id="codeOutput">
+// Array de coordenadas [srcX, srcY]
+const WALK_DOWN_WALK_FRAMES = [
+    [24, 17],
+    [88, 17],
+    [152, 17],
+    [216, 17],
+    [280, 17],
+    [344, 17]
+];
+            </pre>
+            
+            <h3>Visualização da SpriteSheet Completa (Zoom 3x)</h3>
+            <canvas id="originalCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const originalCanvas = document.getElementById('originalCanvas');
+        const originalCtx = originalCanvas.getContext('2d');
+        const animationCanvas = document.getElementById('animationCanvas');
+        const animationCtx = animationCanvas.getContext('2d');
+        const spriteSelect = document.getElementById('spriteSelect');
+        const frameWidthInput = document.getElementById('frameWidth');
+        const frameHeightInput = document.getElementById('frameHeight');
+        const numFramesInput = document.getElementById('numFrames');
+        const drawScaleSelect = document.getElementById('drawScale');
+        const fpsInput = document.getElementById('fps');
+        const currentFrameDisplay = document.getElementById('currentFrameDisplay');
+        const srcXInput = document.getElementById('srcXInput');
+        const srcYInput = document.getElementById('srcYInput');
+        const codeOutput = document.getElementById('codeOutput');
+        const flipHorizontalCheckbox = document.getElementById('flipHorizontal'); // NOVO
+        
+        const ORIGINAL_ZOOM_SCALE = 3; 
+
+        let currentImage = new Image();
+        let frameInterval = null;
+        let isAnimating = true;
+        let currentFrame = 0;
+        let frameData = []; 
+
+        // DADOS DE REFERÊNCIA INICIAIS (W=16, H=34, Pitch=64)
+        const INITIAL_WALK_DOWN_DATA = [
+            [24, 17],
+            [88, 17], 
+            [152, 17], 
+            [216, 17], 
+            [280, 17], 
+            [344, 17]  
+        ];
+        
+        // --- Funções Principais de Inicialização e Desenho ---
+
+        function initFrames() {
+            const selectedSprite = spriteSelect.value;
+            const numFrames = parseInt(numFramesInput.value);
+            const frameWidth = parseInt(frameWidthInput.value);
+            const frameHeight = parseInt(frameHeightInput.value);
+
+            // Carrega dados predefinidos para Walk_Down (para começar)
+            if (selectedSprite === 'Walk_Down-Sheet.png' && numFrames === INITIAL_WALK_DOWN_DATA.length) {
+                frameData = INITIAL_WALK_DOWN_DATA.map(arr => [...arr]); 
+            } else {
+                // Inicializa novos dados de frame para outras sprites
+                const newFrameData = [];
+                for(let i = 0; i < numFrames; i++) {
+                    const defaultX = i * frameWidth;
+                    newFrameData.push(frameData[i] || [defaultX, 0]); 
+                }
+                frameData = newFrameData;
+            }
+            
+            currentFrame = 0;
+            updateFrameUI();
+            updateAnimation();
+        }
+
+        function loadSelectedSprite() {
+            const fileName = spriteSelect.value;
+            
+            // Ajusta W/H e Nº de Frames para o padrão
+            if (fileName.includes('Walk')) {
+                 frameWidthInput.value = 16;
+                 frameHeightInput.value = 34;
+                 numFramesInput.value = 6;
+            } else if (fileName.includes('Idle')) {
+                 frameWidthInput.value = 16;
+                 frameHeightInput.value = 34;
+                 numFramesInput.value = 4;
+            } else {
+                 frameWidthInput.value = 16;
+                 frameHeightInput.value = 34;
+                 numFramesInput.value = 6;
+            }
+
+            currentImage.onload = function() {
+                originalCanvas.width = currentImage.width * ORIGINAL_ZOOM_SCALE;
+                originalCanvas.height = currentImage.height * ORIGINAL_ZOOM_SCALE;
+                originalCtx.imageSmoothingEnabled = false; 
+                
+                initFrames(); 
+            };
+            currentImage.onerror = function() {
+                alert(`Erro ao carregar a imagem: ${fileName}. Verifique se o arquivo está na mesma pasta.`);
+            };
+            currentImage.src = fileName; 
+        }
+
+        function updateCodeOutput() {
+            let name = spriteSelect.value.replace(/-Sheet\.png$/, '').toUpperCase().replace('-', '_');
+            if (!name.includes('FRAMES')) {
+                name += '_FRAMES';
+            }
+            
+            const formattedFrames = frameData.map(f => `    [${f[0]}, ${f[1]}]`).join(',\n');
+            
+            codeOutput.textContent = `
+// --- Configurações Calibradas ---
+const SPRITE_WIDTH = ${frameWidthInput.value};
+const SPRITE_HEIGHT = ${frameHeightInput.value};
+const ${name} = [
+${formattedFrames}
+];
+//--------------------------------
+`;
+        }
+
+        function drawFrame(frameIndex) {
+            const frameWidth = parseInt(frameWidthInput.value);
+            const frameHeight = parseInt(frameHeightInput.value);
+            const scale = parseInt(drawScaleSelect.value);
+            const flip = flipHorizontalCheckbox.checked; // NOVO: Verifica se deve inverter
+
+            const [srcX, srcY] = frameData[frameIndex];
+            
+            if (isNaN(srcX) || isNaN(srcY) || isNaN(frameWidth) || isNaN(frameHeight)) return;
+
+            // --- Desenho na SpriteSheet Completa (COM ZOOM) ---
+            originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+            originalCtx.drawImage(currentImage, 
+                0, 0, currentImage.width, currentImage.height, 
+                0, 0, originalCanvas.width, originalCanvas.height 
+            );
+
+            // Desenha um retângulo vermelho de highlight ampliado
+            originalCtx.strokeStyle = 'red';
+            originalCtx.lineWidth = 2 * ORIGINAL_ZOOM_SCALE; 
+            originalCtx.strokeRect(
+                srcX * ORIGINAL_ZOOM_SCALE, 
+                srcY * ORIGINAL_ZOOM_SCALE, 
+                frameWidth * ORIGINAL_ZOOM_SCALE, 
+                frameHeight * ORIGINAL_ZOOM_SCALE
+            );
+
+
+            // --- Desenho no Canvas de Animação (Centralizado e Invertido) ---
+            animationCtx.imageSmoothingEnabled = false; 
+
+            const scaledWidth = frameWidth * scale;
+            const scaledHeight = frameHeight * scale;
+            
+            const destX = (animationCanvas.width / 2) - (scaledWidth / 2);
+            const destY = (animationCanvas.height / 2) - (scaledHeight / 2);
+            
+            animationCtx.clearRect(0, 0, animationCanvas.width, animationCanvas.height);
+            
+            // Lógica de Inversão
+            animationCtx.save(); // Salva o estado atual (sem inversão)
+            
+            if (flip) {
+                // 1. Move a origem do canvas para o centro da área de desenho do sprite (destX + metade da largura escalada)
+                animationCtx.translate(destX + scaledWidth, destY);
+                // 2. Inverte o eixo X (espelha)
+                animationCtx.scale(-1, 1);
+                // 3. Move o ponto de desenho de volta (e a translação inicial garante a centralização correta)
+                // O novo ponto de destino (destX) será 0, e a largura será negativa (por causa do scale(-1, 1))
+            }
+            
+            animationCtx.drawImage(
+                currentImage,
+                srcX, srcY,
+                frameWidth, frameHeight,
+                flip ? 0 : destX, // Se invertido, o novo X inicial é 0 após o translate
+                flip ? 0 : destY, // Se invertido, o novo Y inicial é 0 após o translate
+                scaledWidth * (flip ? 1 : 1), // Largura normal (o scale(-1) cuida da inversão)
+                scaledHeight
+            );
+            
+            animationCtx.restore(); // Restaura o estado original do canvas (remove a inversão)
+            
+            // Desenha o quadrado de referência para o centro (deve estar fora do bloco save/restore)
+            animationCtx.fillStyle = 'red';
+            animationCtx.fillRect(animationCanvas.width / 2 - 1, animationCanvas.height / 2 - 1, 2, 2);
+        }
+
+        function updateAnimation() {
+            if (frameInterval) {
+                clearInterval(frameInterval);
+                frameInterval = null;
+            }
+
+            const fps = parseInt(fpsInput.value);
+            const intervalTime = 1000 / fps;
+            
+            updateCodeOutput(); 
+            
+            if (isAnimating) {
+                frameInterval = setInterval(() => {
+                    currentFrame = (currentFrame + 1) % frameData.length;
+                    updateFrameUI();
+                    drawFrame(currentFrame);
+                }, intervalTime);
+            } else {
+                drawFrame(currentFrame);
+            }
+        }
+        
+        // --- Funções de Navegação e UI --- (não alteradas)
+
+        function toggleAnimate() {
+            isAnimating = !isAnimating;
+            updateAnimation();
+        }
+        
+        function prevFrame() {
+            if (frameData.length > 0) {
+                currentFrame = (currentFrame - 1 + frameData.length) % frameData.length;
+                updateFrameUI();
+                if (!isAnimating) drawFrame(currentFrame);
+            }
+        }
+
+        function nextFrame() {
+            if (frameData.length > 0) {
+                currentFrame = (currentFrame + 1) % frameData.length;
+                updateFrameUI();
+                if (!isAnimating) drawFrame(currentFrame);
+            }
+        }
+        
+        function updateCurrentFrameCoords() {
+            if (frameData[currentFrame]) {
+                frameData[currentFrame][0] = parseInt(srcXInput.value) || 0;
+                frameData[currentFrame][1] = parseInt(srcYInput.value) || 0;
+                
+                if (!isAnimating) drawFrame(currentFrame);
+                updateCodeOutput();
+            }
+        }
+
+        function updateFrameUI() {
+            currentFrameDisplay.textContent = currentFrame;
+            if (frameData[currentFrame]) {
+                srcXInput.value = frameData[currentFrame][0];
+                srcYInput.value = frameData[currentFrame][1];
+            }
+        }
+
+
+        // --- Setup Inicial ---
+        spriteSelect.addEventListener('change', loadSelectedSprite);
+        frameWidthInput.addEventListener('input', initFrames);
+        frameHeightInput.addEventListener('input', initFrames);
+        numFramesInput.addEventListener('input', initFrames);
+        drawScaleSelect.addEventListener('change', updateAnimation);
+        fpsInput.addEventListener('input', updateAnimation);
+        srcXInput.addEventListener('input', updateCurrentFrameCoords);
+        srcYInput.addEventListener('input', updateCurrentFrameCoords);
+        
+        loadSelectedSprite(); 
+    </script>
+
+</body>
+</html>
