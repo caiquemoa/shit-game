@@ -4,14 +4,18 @@ body {
     text-align: center;
     margin: 0;
     padding: 20px;
+    display: flex; /* Adiciona flexbox para centralizar */
+    flex-direction: column;
+    align-items: center; /* Centraliza horizontalmente */
+    justify-content: center; /* Centraliza verticalmente se o body tiver altura suficiente */
+    min-height: 100vh; /* Garante que o body ocupe a altura total da viewport */
 }
 
 h1, p {
     color: #333;
 }
 
-/* Estilo do nosso "mapa" */
 #gameCanvas {
-    background-color: #ffffff;
+    background-color: #333; /* Fundo mais escuro para contrastar com tiles claros */
     border: 2px solid #000000;
 }

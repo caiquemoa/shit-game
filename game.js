@@ -4,31 +4,36 @@ const socket = io();
 // Configuração do Canvas (nosso mapa)
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const PLAYER_SIZE = 20; // Deve ser igual ao do servidor
+
+// --- Novas Configurações do Grid (DEVE ser as mesmas do servidor) ---
+const GRID_SIZE = 32; // Tamanho de cada tile em pixels
+const PLAYER_SIZE = GRID_SIZE; // Jogador ocupa um tile inteiro
 
 // Armazenamento local
 let myId = '';
 let players = {};
+let gameMap = []; // O cliente agora também mantém o mapa
 let inputState = { 
     ArrowUp: false, 
     ArrowDown: false, 
     ArrowLeft: false, 
     ArrowRight: false,
-    isAttacking: false // Novo: para ataques
+    isAttacking: false 
 };
 
-// Mapeamento de teclas para ações futuras
+// Mapeamento de teclas para ações
 const keyMap = {
     'w': 'ArrowUp', 'W': 'ArrowUp',
     's': 'ArrowDown', 'S': 'ArrowDown',
     'a': 'ArrowLeft', 'A': 'ArrowLeft',
     'd': 'ArrowRight', 'D': 'ArrowRight',
-    ' ': 'isAttacking' // Espaço para atacar
+    ' ': 'isAttacking' 
 };
 
-// 1. Recebe a atualização de estado do servidor
-socket.on('gameStateUpdate', (currentPlayers) => {
-    players = currentPlayers;
+// 1. Recebe a atualização de estado do servidor (inclui mapa)
+socket.on('gameStateUpdate', (data) => {
+    players = data.players;
+    gameMap = data.map;
 });
 
 // 2. Recebe o ID na conexão inicial
@@ -40,15 +45,36 @@ socket.on('connect', () => {
 
 // 3. Lógica de Desenho (O "Game Loop" do Cliente)
 function drawGame() {
-    // Limpa o mapa (canvas)
+    // Limpa o canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Desenha cada jogador na tela
+    // --- Desenha o MAPA ---
+    if (gameMap.length > 0) {
+        for (let y = 0; y < gameMap.length; y++) {
+            for (let x = 0; x < gameMap[y].length; x++) {
+                const tileType = gameMap[y][x];
+                if (tileType === 0) { // Caminho
+                    ctx.fillStyle = '#ADD8E6'; // Azul claro para o chão
+                } else if (tileType === 1) { // Parede
+                    ctx.fillStyle = '#8B4513'; // Marrom para paredes
+                }
+                ctx.fillRect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+                
+                // Opcional: Desenhar bordas do grid
+                ctx.strokeStyle = '#CCCCCC';
+                ctx.strokeRect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+            }
+        }
+    }
+
+
+    // --- Desenha os Jogadores ---
     for (const id in players) {
         const player = players[id];
         
         // Desenha o quadrado do jogador
         ctx.fillStyle = player.color;
+        // Posições X e Y já vêm convertidas para pixels do servidor
         ctx.fillRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
 
         // Desenha a barra de vida (Health Bar)
@@ -88,7 +114,6 @@ requestAnimationFrame(drawGame);
 
 // 4. Lógica de Input (Envio do Estado do Teclado)
 function sendInput() {
-    // Envia o estado atual do teclado e ataque para o servidor
     socket.emit('input', { 
         keys: {
             ArrowUp: inputState.ArrowUp,
