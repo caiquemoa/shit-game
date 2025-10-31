@@ -1,0 +1,17 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+}
+
+h1, p {
+    color: #333;
+}
+
+/* Estilo do nosso "mapa" */
+#gameCanvas {
+    background-color: #ffffff;
+    border: 2px solid #000000;
+}
