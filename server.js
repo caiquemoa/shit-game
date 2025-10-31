@@ -14,12 +14,14 @@ app.use(express.static(__dirname));
 
 // 3. Estrutura de Dados e Lógica do Jogo (Backend)
 let players = {};
+let projectiles = []; // Array de projéteis
 let gameLoopInterval;
 
 // --- Configurações do Grid ---
 const GRID_SIZE = 32; // Cada "quadrado" no mapa terá 32x32 pixels
 const MAP_WIDTH_TILES = 25; // Mapa terá 25 tiles de largura (25 * 32 = 800 pixels)
 const MAP_HEIGHT_TILES = 18; // Mapa terá 18 tiles de altura (18 * 32 = 576 pixels, ajustado para caber)
+const PLAYER_SPEED = 5; // Velocidade do jogador (usado para projéteis)
 
 // Mapa de exemplo (0 = caminho, 1 = parede)
 const gameMap = [
@@ -86,20 +88,55 @@ function createNewPlayer(id) {
   const { x, y } = findEmptyGridPosition();
   return {
     id: id,
-    gridX: x,                 // Novo: Posição X no grid
-    gridY: y,                 // Novo: Posição Y no grid
-    x: x * GRID_SIZE,         // Novo: Posição X em pixels (para o cliente desenhar)
-    y: y * GRID_SIZE,         // Novo: Posição Y em pixels (para o cliente desenhar)
+    gridX: x,                 // Posição X no grid
+    gridY: y,                 // Posição Y no grid
+    x: x * GRID_SIZE,         // Posição X em pixels (para o cliente desenhar)
+    y: y * GRID_SIZE,         // Posição Y em pixels (para o cliente desenhar)
     color: getRandomColor(),
     health: 100,             
     speed: PLAYER_SPEED,     
     input: {},               
-    isMoving: false,         // Novo: Para controlar animação de movimento
-    direction: 'down',       // Novo: Direção para sprites futuros
+    isMoving: false,         // Para controlar animação de movimento
+    direction: 'down',       // Direção para mira e sprites futuros
     isAttacking: false,      
-    lastMoveTime: 0,         // Novo: Controla o tempo entre os movimentos no grid
-    moveDelay: 200           // Novo: 200ms entre cada movimento no grid
+    lastMoveTime: 0,         // Controla o tempo entre os movimentos no grid
+    moveDelay: 200,          // 200ms entre cada movimento no grid (300ms para diagonal)
+    lastShotTime: 0,         // Cooldown para tiros (1s)
+    flashRedUntil: 0         // Timestamp para piscar vermelho (cliente usa, mas servidor envia)
   };
+}
+
+// Função para criar um projétil
+function createProjectile(shooterId, direction) {
+  const shooter = players[shooterId];
+  if (!shooter) return;
+
+  const directions = {
+    up: { dx: 0, dy: -PLAYER_SPEED },
+    down: { dx: 0, dy: PLAYER_SPEED },
+    left: { dx: -PLAYER_SPEED, dy: 0 },
+    right: { dx: PLAYER_SPEED, dy: 0 },
+    upleft: { dx: -PLAYER_SPEED / 1.414, dy: -PLAYER_SPEED / 1.414 }, // Diagonal normalizado
+    upright: { dx: PLAYER_SPEED / 1.414, dy: -PLAYER_SPEED / 1.414 },
+    downleft: { dx: -PLAYER_SPEED / 1.414, dy: PLAYER_SPEED / 1.414 },
+    downright: { dx: PLAYER_SPEED / 1.414, dy: PLAYER_SPEED / 1.414 }
+  };
+
+  const dir = directions[direction] || directions.down; // Default down
+
+  projectiles.push({
+    id: Date.now() + Math.random(), // ID único
+    x: shooter.x + GRID_SIZE / 2,   // Centro do jogador
+    y: shooter.y + GRID_SIZE / 2,
+    dx: dir.dx,
+    dy: dir.dy,
+    shooterId: shooterId,
+    size: 4 // Tamanho pequeno
+  });
+
+  // Flash visual breve de ataque
+  shooter.isAttacking = true;
+  setTimeout(() => { shooter.isAttacking = false; }, 100);
 }
 
 // 4. Game Loop do Servidor (Processamento de Lógica)
@@ -109,48 +146,117 @@ function serverGameLoop() {
   for (const id in players) {
     const player = players[id];
     
-    // Processa o movimento baseado em grid
+    // Processa o movimento baseado em grid (agora permite diagonal com teclas simultâneas)
     if (currentTime - player.lastMoveTime > player.moveDelay) {
-        let newGridX = player.gridX;
-        let newGridY = player.gridY;
+        let dx = 0;
+        let dy = 0;
         let moved = false;
 
-        // Prioridade de movimento (se mais de uma tecla pressionada)
-        if (player.input.ArrowUp) { newGridY--; player.direction = 'up'; moved = true; }
-        else if (player.input.ArrowDown) { newGridY++; player.direction = 'down'; moved = true; }
-        else if (player.input.ArrowLeft) { newGridX--; player.direction = 'left'; moved = true; }
-        else if (player.input.ArrowRight) { newGridX++; player.direction = 'right'; moved = true; }
-        
-        if (moved) {
-            // Verifica limites do mapa e colisão com paredes
+        // Calcula delta baseado em inputs simultâneos
+        if (player.input.ArrowLeft) dx = -1;
+        if (player.input.ArrowRight) dx = 1;
+        if (player.input.ArrowUp) dy = -1;
+        if (player.input.ArrowDown) dy = 1;
+
+        // Cancela se opostos
+        if (dx !== 0 && dx !== -1 && dx !== 1) dx = 0; // Não precisa, pois ifs sequenciais: left/right cancelam para 0
+        // Mesma para dy
+
+        const newGridX = player.gridX + dx;
+        const newGridY = player.gridY + dy;
+
+        // Define direção baseada em dx/dy
+        if (dx === 0 && dy === 0) {
+            // Nenhuma direção
+        } else if (dx === -1 && dy === -1) player.direction = 'upleft';
+        else if (dx === 1 && dy === -1) player.direction = 'upright';
+        else if (dx === -1 && dy === 1) player.direction = 'downleft';
+        else if (dx === 1 && dy === 1) player.direction = 'downright';
+        else if (dx === -1) player.direction = 'left';
+        else if (dx === 1) player.direction = 'right';
+        else if (dy === -1) player.direction = 'up';
+        else if (dy === 1) player.direction = 'down';
+
+        const isDiagonal = Math.abs(dx) + Math.abs(dy) === 2;
+        if (isDiagonal) {
+            player.moveDelay = 300; // Mais lento em diagonal
+        } else {
+            player.moveDelay = 200;
+        }
+
+        if (dx !== 0 || dy !== 0) { // moved = true se há input
+            // Verifica limites, parede e ocupação
             if (newGridX >= 0 && newGridX < MAP_WIDTH_TILES &&
                 newGridY >= 0 && newGridY < MAP_HEIGHT_TILES &&
-                gameMap[newGridY][newGridX] === 0) // Verifica se o próximo tile é um caminho (0)
-            {
-                player.gridX = newGridX;
-                player.gridY = newGridY;
-                player.x = newGridX * GRID_SIZE; // Atualiza posição em pixels
-                player.y = newGridY * GRID_SIZE; // Atualiza posição em pixels
-                player.lastMoveTime = currentTime;
-                player.isMoving = true; // Sinaliza que está em movimento
+                gameMap[newGridY][newGridX] === 0) {
+                
+                // Checa colisão com outros players
+                let occupied = false;
+                for (const otherId in players) {
+                    if (otherId !== id && players[otherId].gridX === newGridX && players[otherId].gridY === newGridY) {
+                        occupied = true;
+                        break;
+                    }
+                }
+                if (!occupied) {
+                    player.gridX = newGridX;
+                    player.gridY = newGridY;
+                    player.x = newGridX * GRID_SIZE;
+                    player.y = newGridY * GRID_SIZE;
+                    player.lastMoveTime = currentTime;
+                    player.isMoving = true;
+                    moved = true;
+                } else {
+                    player.isMoving = false;
+                }
             } else {
-                player.isMoving = false; // Não se moveu porque bateu em algo
+                player.isMoving = false;
             }
         } else {
-            player.isMoving = false; // Nenhuma tecla de movimento pressionada
+            player.isMoving = false;
+        }
+
+        // Se health <=0, remove player
+        if (player.health <= 0) {
+            delete players[id];
+            io.to(id).emit('gameOver'); // Notifica cliente
         }
     }
-    
-    // (Futuro: Lógica de Combate, Colisão com outros players, etc. viria aqui)
+
+    // Atualiza projéteis
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const proj = projectiles[i];
+        proj.x += proj.dx;
+        proj.y += proj.dy;
+
+        // Remove se fora do mapa
+        if (proj.x < 0 || proj.x > MAP_WIDTH_TILES * GRID_SIZE || proj.y < 0 || proj.y > MAP_HEIGHT_TILES * GRID_SIZE) {
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        // Checa colisão com players (raio simples)
+        for (const id in players) {
+            const player = players[id];
+            if (id === proj.shooterId) continue; // Não acerta o atirador
+
+            const dist = Math.sqrt((proj.x - (player.x + GRID_SIZE/2))**2 + (proj.y - (player.y + GRID_SIZE/2))**2);
+            if (dist < 16) { // Raio de hit
+                player.health -= 20;
+                player.flashRedUntil = currentTime + 500; // Trigger piscar
+                projectiles.splice(i, 1);
+                break;
+            }
+        }
+    }
   }
 
   // Envia o estado atualizado do jogo para todos os clientes
-  io.emit('gameStateUpdate', { players: players, map: gameMap });
+  io.emit('gameStateUpdate', { players: players, map: gameMap, projectiles: projectiles });
 }
 
 // Inicia o Game Loop do Servidor (30 atualizações por segundo)
 gameLoopInterval = setInterval(serverGameLoop, 1000 / 30);
-
 
 // 5. Lógica de Conexão (Socket.IO)
 io.on('connection', (socket) => {
@@ -160,29 +266,36 @@ io.on('connection', (socket) => {
   players[socket.id] = createNewPlayer(socket.id);
 
   // Envia a todos os jogadores o estado completo atual (incluindo mapa)
-  io.emit('gameStateUpdate', { players: players, map: gameMap }); 
+  io.emit('gameStateUpdate', { players: players, map: gameMap, projectiles: [] }); 
   
   // Ouve inputs do teclado
   socket.on('input', (inputData) => {
     // Atualiza o estado de input do jogador no servidor
     if (players[socket.id]) {
-        // Apenas teclas de movimento importam para o grid
         players[socket.id].input.ArrowUp = inputData.keys.ArrowUp;
         players[socket.id].input.ArrowDown = inputData.keys.ArrowDown;
         players[socket.id].input.ArrowLeft = inputData.keys.ArrowLeft;
         players[socket.id].input.ArrowRight = inputData.keys.ArrowRight;
-
-        players[socket.id].isAttacking = inputData.isAttacking;
     }
   });
-  
+
+  // Ouve tiro (agora via espaço no cliente)
+  socket.on('shoot', () => {
+    const currentTime = Date.now(); // Corrigido: Define localmente
+    const player = players[socket.id];
+    if (player && currentTime - player.lastShotTime > 1000) { // Cooldown 1s
+        createProjectile(socket.id, player.direction);
+        player.lastShotTime = currentTime;
+    }
+  });
+
   // Ouve quando um jogador desconecta
   socket.on('disconnect', () => {
     console.log(`Jogador desconectado: ${socket.id}`);
     delete players[socket.id];
     
     // Envia a todos o estado atualizado (incluindo mapa)
-    io.emit('gameStateUpdate', { players: players, map: gameMap });
+    io.emit('gameStateUpdate', { players: players, map: gameMap, projectiles: projectiles });
   });
 });
 
