@@ -1,11 +1,15 @@
 // spriteData.js
 
-// **ATENÇÃO: SUBSTITUA ESTES VALORES PELOS SEUS VALORES FINAIS CALIBRADOS!**
+// [LOG]
+console.log('[SPRITEDATA] Carregando dados de frames...'); 
+
+// **ATENÇÃO: Mantenha seus valores calibrados de SPRITE_FRAMES_DATA aqui!**
 export const SPRITE_FRAMES_DATA = {
     // 6 frames de caminhada
     'WALK_DOWN': [
         [24, 17], [88, 17], [152, 17], [216, 17], [280, 17], [344, 17]
     ],
+    // ... (restante dos frames de Walk)
     'WALK_UP': [
         [24, 17], [88, 17], [152, 17], [216, 17], [280, 17], [344, 17]
     ],
@@ -34,10 +38,13 @@ export const spriteImages = {
     'Idle_Side': new Image(),
 };
 
-// Define os caminhos dos arquivos
-spriteImages['Walk_Up'].src = 'Walk_Up-Sheet.png';
-spriteImages['Walk_Down'].src = 'Walk_Down-Sheet.png';
-spriteImages['Walk_Side'].src = 'Walk_Side-Sheet.png';
-spriteImages['Idle_Up'].src = 'Idle_Up-Sheet.png';
-spriteImages['Idle_Down'].src = 'Idle_Down-Sheet.png';
-spriteImages['Idle_Side'].src = 'Idle_Side-Sheet.png';
+// Define os caminhos dos arquivos - CORRIGIDO PARA O CAMINHO 'assets/player/' E NOME LIMPO
+// Caminhos de Walk
+spriteImages['Walk_Up'].src = 'assets/player/Walk_Up-Sheet.png';
+spriteImages['Walk_Down'].src = 'assets/player/Walk_Down-Sheet.png';
+spriteImages['Walk_Side'].src = 'assets/player/Walk_Side-Sheet.png'; 
+
+// Caminhos de Idle (FINALMENTE CORRIGIDO PARA O NOME LIMPO)
+spriteImages['Idle_Up'].src = 'assets/player/Idle_Up-Sheet.png';     // <-- NOME LIMPO
+spriteImages['Idle_Down'].src = 'assets/player/Idle_Down-Sheet.png'; // <-- NOME LIMPO
+spriteImages['Idle_Side'].src = 'assets/player/Idle_Side-Sheet.png'; // <-- NOME LIMPO

@@ -10,29 +10,51 @@ export let inputState = {
 };
 export let localAimAngle = 0; 
 
-// A função 'sendInput' e 'sendAim' será fornecida pelo game.js
+// As referências serão preenchidas por initInputHandler
 let socket = null;
 let players = {};
 let camera = { x: 0, y: 0 }; 
 
 export function initInputHandler(s, p, c) {
+    // [LOG]
+    console.log('[INPUT] Inicializando handler. Socket fornecido.');
+    
     socket = s;
     players = p;
     camera = c;
     
+    // Remove listeners antigos antes de adicionar novos para evitar duplicação
+    document.removeEventListener('keydown', handleKeyDown);
+    document.removeEventListener('keyup', handleKeyUp);
+    const canvas = document.getElementById('gameCanvas');
+    if (canvas) {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mousedown', handleMouseDown);
+        canvas.removeEventListener('contextmenu', preventContextMenu); 
+    }
+
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
     
-    const canvas = document.getElementById('gameCanvas');
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('contextmenu', (event) => event.preventDefault()); // Previne menu de contexto
+    if (canvas) {
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('contextmenu', preventContextMenu); // Previne menu de contexto
+    }
+}
+
+function preventContextMenu(event) {
+    event.preventDefault();
 }
 
 function sendInput() {
-    socket.emit('input', { 
-        keys: inputState
-    });
+    if (socket) {
+        socket.emit('input', { 
+            keys: inputState
+        });
+    } else {
+        console.warn('[INPUT] Tentativa de enviar input sem socket.');
+    }
 }
 
 function handleKeyDown(event) {
@@ -52,17 +74,21 @@ function handleKeyUp(event) {
 }
 
 function handleMouseMove(event) {
+    if (!socket || !socket.id) return;
     const myId = socket.id;
-    if (!players[myId]) return; 
+    if (!players[myId] || !event.target) return; 
 
-    const rect = event.target.getBoundingClientRect();
-    // Usa a camera e a posição do mouse na tela para calcular a posição no mapa
+    const canvas = event.target;
+    const rect = canvas.getBoundingClientRect();
+    
+    // Usa a câmera e a posição do mouse na tela para calcular a posição no mapa
     const mouseX = event.clientX - rect.left + camera.x;
     const mouseY = event.clientY - rect.top + camera.y;
 
     const myPlayer = players[myId];
     
     // O ângulo é calculado do CENTRO VISUAL do jogador
+    // O centro visual é player.y - (SPRITE_HEIGHT / 2)
     const angle = Math.atan2(mouseY - (myPlayer.y - SPRITE_HEIGHT / 2), mouseX - myPlayer.x);
     
     localAimAngle = angle; 
@@ -71,6 +97,7 @@ function handleMouseMove(event) {
 }
 
 function handleMouseDown(event) {
+    if (!socket || !socket.id) return;
     if (event.button === 0) { // Botão esquerdo
         socket.emit('shoot');
     }

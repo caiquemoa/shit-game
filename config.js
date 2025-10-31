@@ -1,5 +1,8 @@
 // config.js
 
+// [LOG]
+console.log('[CONFIG] Carregando constantes...'); 
+
 // Configuração do Canvas
 const canvas = document.getElementById('gameCanvas');
 export const ctx = canvas.getContext('2d');

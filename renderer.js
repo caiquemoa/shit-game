@@ -4,7 +4,7 @@ import {
     CANVAS_WIDTH, CANVAS_HEIGHT 
 } from './config.js';
 import { SPRITE_FRAMES_DATA, spriteImages } from './spriteData.js';
-import { localAimAngle } from './inputHandler.js';
+import { localAimAngle } from './inputHandler.js'; // Importa a referência da mira
 
 let players = {};
 let gameMap = [];
@@ -17,6 +17,11 @@ let cameraY = 0;
 
 // Função de inicialização para receber as referências de dados
 export function initRenderer(p, gM, proj, id, mw, mh) {
+    // [LOG]
+    if (myId !== id) {
+        console.log('[RENDERER] Inicializando/Atualizando meu ID para:', id);
+    }
+    
     players = p;
     gameMap = gM;
     projectiles = proj;
@@ -37,10 +42,8 @@ function drawPlayerSprite(player) {
     let frameDataKey = '';
     let flip = false;
     
-    // 1. Determina o nome base da animação
     animationName = player.state === 'walk' ? 'Walk' : 'Idle';
     
-    // 2. Determina a direção, a imagem e a chave do dicionário
     if (player.direction === 'up') {
         spriteImage = spriteImages[`${animationName}_Up`];
         frameDataKey = `${animationName.toUpperCase()}_UP`;
@@ -52,21 +55,18 @@ function drawPlayerSprite(player) {
         frameDataKey = `${animationName.toUpperCase()}_SIDE`;
         flip = (player.direction === 'side_left');
     } else {
-        // Fallback: Idle Down
         spriteImage = spriteImages['Idle_Down'];
         frameDataKey = 'IDLE_DOWN';
     }
     
-    // 3. Fallback: Desenha um círculo se o sprite não carregar
-    if (!spriteImage || !spriteImage.complete || spriteImage.naturalWidth === 0) {
-        ctx.fillStyle = player.color;
-        ctx.beginPath();
-        ctx.arc(0, -12, 12, 0, Math.PI * 2); 
-        ctx.fill();
-        return;
-    }
+if (!spriteImage || !spriteImage.complete || spriteImage.naturalWidth === 0) {
+    ctx.fillStyle = player.color; // <- ISTO ESTÁ DESENHANDO A BOLA VERDE/COLORIDA!
+    ctx.beginPath();
+    ctx.arc(0, -12, 12, 0, Math.PI * 2); 
+    ctx.fill();
+    return;
+}
     
-    // 4. Obtém o frame calibrado do dicionário
     const frameCoords = SPRITE_FRAMES_DATA[frameDataKey];
     let srcX = 0;
     let srcY = 0;
@@ -75,13 +75,11 @@ function drawPlayerSprite(player) {
         [srcX, srcY] = frameCoords[player.frame]; 
     }
     
-    // 5. Calcula as posições de destino no canvas
     const destX = SPRITE_OFFSET_X; 
     const destY = SPRITE_OFFSET_Y; 
     
     ctx.save();
     
-    // 6. Lógica de inversão (Espelhamento Horizontal)
     if (flip) {
         ctx.translate(destX + SPRITE_WIDTH, destY);
         ctx.scale(-1, 1);
@@ -90,12 +88,11 @@ function drawPlayerSprite(player) {
             spriteImage,
             srcX, srcY,
             SPRITE_WIDTH, SPRITE_HEIGHT,
-            0, 0, // Início do desenho é (0,0) no contexto transformado
+            0, 0, 
             SPRITE_WIDTH, SPRITE_HEIGHT
         );
         
     } else {
-        // Desenho normal (sem inversão)
         ctx.drawImage(
             spriteImage,
             srcX, srcY,
@@ -138,10 +135,8 @@ function drawPlayers() {
         
         ctx.save();
         
-        // Move o contexto para a posição dos PÉS do jogador
         ctx.translate(player.x, player.y);
 
-        // Efeito de Dano (Flash Vermelho)
         const now = Date.now();
         if (player.flashRedUntil && now < player.flashRedUntil) {
             ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
@@ -190,9 +185,12 @@ function drawPlayers() {
     }
 }
 
+
 // O Game Loop de Renderização
 export function renderGame() {
-    
+    // [LOG]
+    // console.log('[RENDERER] Executando renderGame...'); // Log muito intenso
+
     // --- Lógica da Câmera (Foco no Jogador Local) ---
     const myPlayer = players[myId];
     
