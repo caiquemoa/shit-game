@@ -1,9 +1,10 @@
-// server.js (Novo e Limpo)
+// server.js (Atualizado com serving explícito de assets)
 
 // 1. Configuração de Dependências
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const path = require('path');  // Adicionado para paths absolutos
 
 // Importa os módulos modularizados
 const { PORT, GAME_TICK_RATE } = require('./constants');
@@ -14,14 +15,24 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Servir os arquivos estáticos
+// Servir os arquivos estáticos da raiz (HTML, JS, CSS, etc.)
 app.use(express.static(__dirname));
+
+// Servir explicitamente a pasta de assets (para corrigir 404 em /assets/player/*.png)
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
+
+// Opcional: Servir pasta 'public' se existir (para outros arquivos estáticos)
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// Opcional: Servir favicon se existir na raiz
+app.get('/favicon.ico', (req, res) => {
+    res.status(204).end();  // Evita 404 no favicon sem arquivo
+});
 
 // 3. Inicialização e Loop do Jogo
 let gameLoopInterval = setInterval(() => {
     gameEngine.serverGameLoop(io);
 }, GAME_TICK_RATE);
-
 
 // 4. Lógica de Conexão (Socket.IO)
 io.on('connection', (socket) => {
