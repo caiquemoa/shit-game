@@ -1,0 +1,13 @@
+{
+  "name": "jogo-mmo-simples",
+  "version": "1.0.0",
+  "description": "Um jogo multiplayer simples com quadrados coloridos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

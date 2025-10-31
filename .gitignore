@@ -1,0 +1,39 @@
+# Dependências do Node (ESSENCIAL)
+# Não queremos enviar a pasta 'node_modules' para o Git.
+# Ela contém milhões de arquivos baixados pelo 'npm install'.
+node_modules
+/npm-debug.log*
+/yarn-debug.log*
+/yarn-error.log*
+/pnpm-debug.log*
+/pnpm-lock.yaml
+
+# Variáveis de Ambiente (SEGURANÇA)
+# Se você adicionar um arquivo .env para senhas ou chaves futuras, ele deve ser ignorado.
+.env
+.env.local
+.env.development
+.env.production
+
+# Arquivos de Sistema Operacional (LIMPEZA)
+# Ignora arquivos de sistema do macOS
+.DS_Store
+
+# Ignora arquivos de sistema do Windows
+Thumbs.db
+ehthumbs.db
+
+# Arquivos de Editores e IDEs (LIMPEZA)
+# Ignora arquivos gerados pelo VS Code
+.vscode/
+
+# Ignora arquivos gerados por outras IDEs (IntelliJ, WebStorm, etc.)
+.idea/
+*.iml
+
+# Logs e builds (DESENVOLVIMENTO)
+/logs
+*.log
+/build
+/dist
+/tmp
