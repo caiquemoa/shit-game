@@ -7,35 +7,35 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const PORT = process.env.PORT || 3000; // Usa a porta do ambiente ou 3000 localmente
+const PORT = process.env.PORT || 3000;
 
 // 2. Servir os arquivos estáticos
 app.use(express.static(__dirname));
 
 // 3. Estrutura de Dados e Lógica do Jogo (Backend)
 let players = {};
-let projectiles = []; // Array de projéteis
+let projectiles = [];
 let gameLoopInterval;
 
-// --- Configurações do Grid ---
-const GRID_SIZE = 32; // Cada "quadrado" no mapa terá 32x32 pixels
-const MAP_WIDTH_TILES = 25; // Mapa terá 25 tiles de largura (25 * 32 = 800 pixels)
-const MAP_HEIGHT_TILES = 18; // Mapa terá 18 tiles de altura (18 * 32 = 576 pixels, ajustado para caber)
-const PLAYER_SPEED = 5; // Velocidade do jogador (usado para projéteis)
+// --- Configurações do Jogo ---
+const GRID_SIZE = 32;       // Tamanho de cada tile do *mapa* (paredes)
+const PLAYER_SIZE = 24;     // Tamanho do *jogador* (menor que o grid)
+const PLAYER_SPEED = 3;     // Velocidade do jogador (pixels por frame/tick)
+const PROJECTILE_SPEED = 6; // Velocidade do projétil
 
-// Mapa de exemplo (0 = caminho, 1 = parede)
+// Mapa (0 = caminho, 1 = parede)
 const gameMap = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1.0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // Pequeno erro de digitação corrigido (1.0 -> 1,0)
     [1,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // Corrigido
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -44,6 +44,8 @@ const gameMap = [
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
+const MAP_WIDTH_PIXELS = gameMap[0].length * GRID_SIZE;
+const MAP_HEIGHT_PIXELS = gameMap.length * GRID_SIZE;
 
 function getRandomColor() {
   const letters = '0123456789ABCDEF';
@@ -54,84 +56,63 @@ function getRandomColor() {
   return color;
 }
 
-// Encontra uma posição vazia no grid para o novo jogador
-function findEmptyGridPosition() {
-    let x, y;
+// Encontra uma posição vazia
+function findEmptyPosition() {
+    let x, y, gridX, gridY;
     let found = false;
     let attempts = 0;
-    const maxAttempts = MAP_WIDTH_TILES * MAP_HEIGHT_TILES; // Evita loop infinito em mapas cheios
+    const maxAttempts = gameMap.length * gameMap[0].length;
 
     while (!found && attempts < maxAttempts) {
-        x = Math.floor(Math.random() * MAP_WIDTH_TILES);
-        y = Math.floor(Math.random() * MAP_HEIGHT_TILES);
+        // Encontra um tile de chão (0)
+        gridX = Math.floor(Math.random() * gameMap[0].length);
+        gridY = Math.floor(Math.random() * gameMap.length);
 
-        // Verifica se a posição é um caminho (0) e se não tem outro jogador
-        if (gameMap[y][x] === 0) {
-            let occupied = false;
-            for (const id in players) {
-                if (players[id].gridX === x && players[id].gridY === y) {
-                    occupied = true;
-                    break;
-                }
-            }
-            if (!occupied) {
-                found = true;
-            }
+        if (gameMap[gridY][gridX] === 0) {
+            // Posição em pixels (centro do tile)
+            x = gridX * GRID_SIZE + (GRID_SIZE / 2);
+            y = gridY * GRID_SIZE + (GRID_SIZE / 2);
+            found = true;
         }
         attempts++;
     }
-    return found ? { x, y } : { x: 1, y: 1 }; // Retorna 1,1 se não encontrar (pode ser parede)
+    return found ? { x, y } : { x: 48, y: 48 }; // Posição de fallback (tile 1,1)
 }
 
 // Inicializa o estado de um novo jogador
 function createNewPlayer(id) {
-  const { x, y } = findEmptyGridPosition();
+  const { x, y } = findEmptyPosition();
   return {
     id: id,
-    gridX: x,                 // Posição X no grid
-    gridY: y,                 // Posição Y no grid
-    x: x * GRID_SIZE,         // Posição X em pixels (para o cliente desenhar)
-    y: y * GRID_SIZE,         // Posição Y em pixels (para o cliente desenhar)
+    x: x,                     // Posição X em pixels
+    y: y,                     // Posição Y em pixels
     color: getRandomColor(),
     health: 100,             
-    speed: PLAYER_SPEED,     
-    input: {},               
-    isMoving: false,         // Para controlar animação de movimento
-    direction: 'down',       // Direção para mira e sprites futuros
-    isAttacking: false,      
-    lastMoveTime: 0,         // Controla o tempo entre os movimentos no grid
-    moveDelay: 200,          // 200ms entre cada movimento no grid (300ms para diagonal)
-    lastShotTime: 0,         // Cooldown para tiros (1s)
-    flashRedUntil: 0         // Timestamp para piscar vermelho (cliente usa, mas servidor envia)
+    speed: PLAYER_SPEED,
+    input: {},                // Teclas pressionadas
+    aimAngle: 0,              // Novo: Ângulo da mira (em radianos)
+    isAttacking: false,       // Flash visual
+    lastShotTime: 0,
+    flashRedUntil: 0
   };
 }
 
-// Função para criar um projétil
-function createProjectile(shooterId, direction) {
+// Função para criar um projétil (agora usa ângulo)
+function createProjectile(shooterId, angle) {
   const shooter = players[shooterId];
   if (!shooter) return;
 
-  const directions = {
-    up: { dx: 0, dy: -PLAYER_SPEED },
-    down: { dx: 0, dy: PLAYER_SPEED },
-    left: { dx: -PLAYER_SPEED, dy: 0 },
-    right: { dx: PLAYER_SPEED, dy: 0 },
-    upleft: { dx: -PLAYER_SPEED / 1.414, dy: -PLAYER_SPEED / 1.414 }, // Diagonal normalizado
-    upright: { dx: PLAYER_SPEED / 1.414, dy: -PLAYER_SPEED / 1.414 },
-    downleft: { dx: -PLAYER_SPEED / 1.414, dy: PLAYER_SPEED / 1.414 },
-    downright: { dx: PLAYER_SPEED / 1.414, dy: PLAYER_SPEED / 1.414 }
-  };
-
-  const dir = directions[direction] || directions.down; // Default down
+  const dx = Math.cos(angle) * PROJECTILE_SPEED;
+  const dy = Math.sin(angle) * PROJECTILE_SPEED;
 
   projectiles.push({
-    id: Date.now() + Math.random(), // ID único
-    x: shooter.x + GRID_SIZE / 2,   // Centro do jogador
-    y: shooter.y + GRID_SIZE / 2,
-    dx: dir.dx,
-    dy: dir.dy,
+    id: Date.now() + Math.random(),
+    x: shooter.x, // Centro do jogador (ajustado no cliente)
+    y: shooter.y,
+    dx: dx,
+    dy: dy,
     shooterId: shooterId,
-    size: 4 // Tamanho pequeno
+    size: 4
   });
 
   // Flash visual breve de ataque
@@ -139,116 +120,117 @@ function createProjectile(shooterId, direction) {
   setTimeout(() => { shooter.isAttacking = false; }, 100);
 }
 
+// --- Nova Lógica de Colisão (Pixel-based) ---
+function isCollidingWithMap(x, y) {
+    // Verifica os 4 cantos do jogador contra o grid do mapa
+    const halfPlayer = PLAYER_SIZE / 2;
+    const checkPoints = [
+        { x: x - halfPlayer, y: y - halfPlayer }, // Top-Left
+        { x: x + halfPlayer, y: y - halfPlayer }, // Top-Right
+        { x: x - halfPlayer, y: y + halfPlayer }, // Bottom-Left
+        { x: x + halfPlayer, y: y + halfPlayer }  // Bottom-Right
+    ];
+
+    for (const point of checkPoints) {
+        // Garante que o ponto está dentro dos limites do mapa
+        if (point.x < 0 || point.x >= MAP_WIDTH_PIXELS || point.y < 0 || point.y >= MAP_HEIGHT_PIXELS) {
+            return true; // Colidiu com os limites externos
+        }
+
+        const gridX = Math.floor(point.x / GRID_SIZE);
+        const gridY = Math.floor(point.y / GRID_SIZE);
+
+        // Checa se o tile do mapa é uma parede (1)
+        if (gameMap[gridY] && gameMap[gridY][gridX] === 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
 // 4. Game Loop do Servidor (Processamento de Lógica)
 function serverGameLoop() {
   const currentTime = Date.now();
   
+  // Atualiza Jogadores
   for (const id in players) {
     const player = players[id];
     
-    // Processa o movimento baseado em grid (agora permite diagonal com teclas simultâneas)
-    if (currentTime - player.lastMoveTime > player.moveDelay) {
-        let dx = 0;
-        let dy = 0;
-        let moved = false;
+    // Processa o movimento (fluido)
+    let dx = 0;
+    let dy = 0;
 
-        // Calcula delta baseado em inputs simultâneos
-        if (player.input.ArrowLeft) dx = -1;
-        if (player.input.ArrowRight) dx = 1;
-        if (player.input.ArrowUp) dy = -1;
-        if (player.input.ArrowDown) dy = 1;
+    if (player.input.ArrowUp) dy -= player.speed;
+    if (player.input.ArrowDown) dy += player.speed;
+    if (player.input.ArrowLeft) dx -= player.speed;
+    if (player.input.ArrowRight) dx += player.speed;
 
-        // Cancela se opostos
-        if (dx !== 0 && dx !== -1 && dx !== 1) dx = 0; // Não precisa, pois ifs sequenciais: left/right cancelam para 0
-        // Mesma para dy
-
-        const newGridX = player.gridX + dx;
-        const newGridY = player.gridY + dy;
-
-        // Define direção baseada em dx/dy
-        if (dx === 0 && dy === 0) {
-            // Nenhuma direção
-        } else if (dx === -1 && dy === -1) player.direction = 'upleft';
-        else if (dx === 1 && dy === -1) player.direction = 'upright';
-        else if (dx === -1 && dy === 1) player.direction = 'downleft';
-        else if (dx === 1 && dy === 1) player.direction = 'downright';
-        else if (dx === -1) player.direction = 'left';
-        else if (dx === 1) player.direction = 'right';
-        else if (dy === -1) player.direction = 'up';
-        else if (dy === 1) player.direction = 'down';
-
-        const isDiagonal = Math.abs(dx) + Math.abs(dy) === 2;
-        if (isDiagonal) {
-            player.moveDelay = 300; // Mais lento em diagonal
-        } else {
-            player.moveDelay = 200;
-        }
-
-        if (dx !== 0 || dy !== 0) { // moved = true se há input
-            // Verifica limites, parede e ocupação
-            if (newGridX >= 0 && newGridX < MAP_WIDTH_TILES &&
-                newGridY >= 0 && newGridY < MAP_HEIGHT_TILES &&
-                gameMap[newGridY][newGridX] === 0) {
-                
-                // Checa colisão com outros players
-                let occupied = false;
-                for (const otherId in players) {
-                    if (otherId !== id && players[otherId].gridX === newGridX && players[otherId].gridY === newGridY) {
-                        occupied = true;
-                        break;
-                    }
-                }
-                if (!occupied) {
-                    player.gridX = newGridX;
-                    player.gridY = newGridY;
-                    player.x = newGridX * GRID_SIZE;
-                    player.y = newGridY * GRID_SIZE;
-                    player.lastMoveTime = currentTime;
-                    player.isMoving = true;
-                    moved = true;
-                } else {
-                    player.isMoving = false;
-                }
-            } else {
-                player.isMoving = false;
-            }
-        } else {
-            player.isMoving = false;
-        }
-
-        // Se health <=0, remove player
-        if (player.health <= 0) {
-            delete players[id];
-            io.to(id).emit('gameOver'); // Notifica cliente
-        }
+    // Normaliza o movimento diagonal (para não ser mais rápido)
+    if (dx !== 0 && dy !== 0) {
+        const magnitude = Math.sqrt(dx * dx + dy * dy);
+        dx = (dx / magnitude) * player.speed;
+        dy = (dy / magnitude) * player.speed;
     }
 
-    // Atualiza projéteis
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-        const proj = projectiles[i];
-        proj.x += proj.dx;
-        proj.y += proj.dy;
-
-        // Remove se fora do mapa
-        if (proj.x < 0 || proj.x > MAP_WIDTH_TILES * GRID_SIZE || proj.y < 0 || proj.y > MAP_HEIGHT_TILES * GRID_SIZE) {
-            projectiles.splice(i, 1);
-            continue;
-        }
-
-        // Checa colisão com players (raio simples)
-        for (const id in players) {
-            const player = players[id];
-            if (id === proj.shooterId) continue; // Não acerta o atirador
-
-            const dist = Math.sqrt((proj.x - (player.x + GRID_SIZE/2))**2 + (proj.y - (player.y + GRID_SIZE/2))**2);
-            if (dist < 16) { // Raio de hit
-                player.health -= 20;
-                player.flashRedUntil = currentTime + 500; // Trigger piscar
-                projectiles.splice(i, 1);
-                break;
-            }
-        }
+    // --- Colisão (Slide) ---
+    // Movimenta X
+    let newX = player.x + dx;
+    if (!isCollidingWithMap(newX, player.y)) {
+        player.x = newX;
     }
+    // Movimenta Y
+    let newY = player.y + dy;
+    if (!isCollidingWithMap(player.x, newY)) {
+        player.y = newY;
+    }
+
+    // (Limites do mapa já são tratados pelo isCollidingWithMap)
+
+    // Se health <=0, remove player
+    if (player.health <= 0) {
+        delete players[id];
+        io.to(id).emit('gameOver'); // Notifica cliente
+    }
+  }
+
+  // Atualiza projéteis
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+      const proj = projectiles[i];
+      proj.x += proj.dx;
+      proj.y += proj.dy;
+
+      // Colisão com Paredes
+      const gridX = Math.floor(proj.x / GRID_SIZE);
+      const gridY = Math.floor(proj.y / GRID_SIZE);
+
+      let collidedWithWall = false;
+      if (gridX < 0 || gridX >= gameMap[0].length || gridY < 0 || gridY >= gameMap.length) {
+          collidedWithWall = true; // Fora do mapa
+      } else if (gameMap[gridY][gridX] === 1) {
+          collidedWithWall = true; // Bateu na parede
+      }
+      
+      if (collidedWithWall) {
+          projectiles.splice(i, 1);
+          continue;
+      }
+
+      // Checa colisão com players
+      for (const id in players) {
+          const player = players[id];
+          if (id === proj.shooterId) continue; // Não acerta o atirador
+
+          const dist = Math.sqrt((proj.x - player.x)**2 + (proj.y - player.y)**2);
+          
+          // (PLAYER_SIZE / 2) é o raio do jogador
+          if (dist < (PLAYER_SIZE / 2) + proj.size) { 
+              player.health -= 20;
+              player.flashRedUntil = currentTime + 500;
+              projectiles.splice(i, 1);
+              break; // Projétil some e para de checar
+          }
+      }
   }
 
   // Envia o estado atualizado do jogo para todos os clientes
@@ -262,29 +244,29 @@ gameLoopInterval = setInterval(serverGameLoop, 1000 / 30);
 io.on('connection', (socket) => {
   console.log(`Novo jogador conectado: ${socket.id}`);
   
-  // Adiciona o novo jogador
   players[socket.id] = createNewPlayer(socket.id);
-
-  // Envia a todos os jogadores o estado completo atual (incluindo mapa)
   io.emit('gameStateUpdate', { players: players, map: gameMap, projectiles: [] }); 
   
   // Ouve inputs do teclado
   socket.on('input', (inputData) => {
-    // Atualiza o estado de input do jogador no servidor
     if (players[socket.id]) {
-        players[socket.id].input.ArrowUp = inputData.keys.ArrowUp;
-        players[socket.id].input.ArrowDown = inputData.keys.ArrowDown;
-        players[socket.id].input.ArrowLeft = inputData.keys.ArrowLeft;
-        players[socket.id].input.ArrowRight = inputData.keys.ArrowRight;
+        players[socket.id].input = inputData.keys;
     }
   });
 
-  // Ouve tiro (agora via espaço no cliente)
+  // Novo: Ouve a atualização da mira
+  socket.on('aimUpdate', (data) => {
+    if (players[socket.id]) {
+        players[socket.id].aimAngle = data.angle;
+    }
+  });
+
+  // Ouve tiro (agora via clique)
   socket.on('shoot', () => {
-    const currentTime = Date.now(); // Corrigido: Define localmente
+    const currentTime = Date.now();
     const player = players[socket.id];
-    if (player && currentTime - player.lastShotTime > 1000) { // Cooldown 1s
-        createProjectile(socket.id, player.direction);
+    if (player && currentTime - player.lastShotTime > 500) { // Cooldown 0.5s
+        createProjectile(socket.id, player.aimAngle); // Usa o ângulo armazenado
         player.lastShotTime = currentTime;
     }
   });
@@ -293,8 +275,6 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`Jogador desconectado: ${socket.id}`);
     delete players[socket.id];
-    
-    // Envia a todos o estado atualizado (incluindo mapa)
     io.emit('gameStateUpdate', { players: players, map: gameMap, projectiles: projectiles });
   });
 });
