@@ -18,7 +18,7 @@ let cameraY = 0;
 // Função de inicialização para receber as referências de dados
 export function initRenderer(p, gM, proj, id, mw, mh) {
     // [LOG]
-    if (myId !== id) {
+    if (myId !== id && id !== '') { // Só loga se o ID for novo e não vazio
         console.log('[RENDERER] Inicializando/Atualizando meu ID para:', id);
     }
     
@@ -44,28 +44,31 @@ function drawPlayerSprite(player) {
     
     animationName = player.state === 'walk' ? 'Walk' : 'Idle';
     
+    // *** Lembrete de Preferência do Usuário ***
+    // (Usando os nomes de arquivo corretos para Idle)
     if (player.direction === 'up') {
-        spriteImage = spriteImages[`${animationName}_Up`];
-        frameDataKey = `${animationName.toUpperCase()}_UP`;
+        spriteImage = player.state === 'walk' ? spriteImages['Walk_Up'] : spriteImages['Idle_Up'];
+        frameDataKey = player.state === 'walk' ? 'WALK_UP' : 'IDLE_UP';
     } else if (player.direction === 'down') {
-        spriteImage = spriteImages[`${animationName}_Down`];
-        frameDataKey = `${animationName.toUpperCase()}_DOWN`;
+        spriteImage = player.state === 'walk' ? spriteImages['Walk_Down'] : spriteImages['Idle_Down'];
+        frameDataKey = player.state === 'walk' ? 'WALK_DOWN' : 'IDLE_DOWN';
     } else if (player.direction === 'side_right' || player.direction === 'side_left') {
-        spriteImage = spriteImages[`${animationName}_Side`];
-        frameDataKey = `${animationName.toUpperCase()}_SIDE`;
+        spriteImage = player.state === 'walk' ? spriteImages['Walk_Side'] : spriteImages['Idle_Side'];
+        frameDataKey = player.state === 'walk' ? 'WALK_SIDE' : 'IDLE_SIDE';
         flip = (player.direction === 'side_left');
     } else {
         spriteImage = spriteImages['Idle_Down'];
         frameDataKey = 'IDLE_DOWN';
     }
     
-if (!spriteImage || !spriteImage.complete || spriteImage.naturalWidth === 0) {
-    ctx.fillStyle = player.color; // <- ISTO ESTÁ DESENHANDO A BOLA VERDE/COLORIDA!
-    ctx.beginPath();
-    ctx.arc(0, -12, 12, 0, Math.PI * 2); 
-    ctx.fill();
-    return;
-}
+    if (!spriteImage || !spriteImage.complete || spriteImage.naturalWidth === 0) {
+        // Fallback (bola colorida)
+        ctx.fillStyle = player.color; 
+        ctx.beginPath();
+        ctx.arc(0, -12, 12, 0, Math.PI * 2); 
+        ctx.fill();
+        return;
+    }
     
     const frameCoords = SPRITE_FRAMES_DATA[frameDataKey];
     let srcX = 0;
@@ -158,11 +161,13 @@ function drawPlayers() {
         ctx.fillStyle = 'lime';
         ctx.fillRect(-healthBarWidth / 2, healthBarYOffset, currentHealthWidth, 3);
         
-        ctx.fillStyle = '#000';
+        // --- MODIFICADO: Desenha o NOME ---
+        // Define a cor do nome (amarelo para o jogador local, branco para outros)
+        ctx.fillStyle = (id === myId) ? '#FFFF00' : '#FFFFFF';
         ctx.font = '10px Arial';
-        const label = id === myId ? 'EU' : id.substring(0, 4);
+        const label = player.name || '...'; // Usa o nome do jogador
         ctx.textAlign = 'center';
-        ctx.fillText(label, 0, 10); 
+        ctx.fillText(label, 0, 10); // Posição abaixo dos pés
         
         ctx.restore();
 
@@ -188,9 +193,6 @@ function drawPlayers() {
 
 // O Game Loop de Renderização
 export function renderGame() {
-    // [LOG]
-    // console.log('[RENDERER] Executando renderGame...'); // Log muito intenso
-
     // --- Lógica da Câmera (Foco no Jogador Local) ---
     const myPlayer = players[myId];
     
@@ -205,6 +207,7 @@ export function renderGame() {
             cameraX = targetX;
             cameraY = targetY;
         } else {
+            // Suavização da câmera (lerp)
             cameraX += (targetX - cameraX) * 0.1;
             cameraY += (targetY - cameraY) * 0.1;
         }

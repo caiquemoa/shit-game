@@ -36,24 +36,25 @@ function findEmptyPosition() {
     return found ? { x, y } : { x: 48, y: 64 }; // Fallback
 }
 
-// Cria um novo jogador
-exports.createNewPlayer = function(id) {
+// Cria um novo jogador (MODIFICADO para aceitar 'name')
+exports.createNewPlayer = function(id, name) {
     const { x, y } = findEmptyPosition();
     return {
         id: id,
+        name: name, // <-- NOVO
         x: x, 
         y: y, 
         color: getRandomColor(),
-        health: PLAYER_START_HEALTH,             
+        health: PLAYER_START_HEALTH, 
         speed: PLAYER_SPEED,
         input: {}, 
-        aimAngle: 0,              
-        isAttacking: false,       
+        aimAngle: 0, 
+        isAttacking: false, 
         lastShotTime: 0,
         flashRedUntil: 0,
-        state: 'idle',           
-        direction: 'down',       
-        frame: 0,                
+        state: 'idle', 
+        direction: 'down', 
+        frame: 0, 
         lastFrameTime: Date.now() 
     };
 };
@@ -100,8 +101,9 @@ exports.getGameState = function() {
     };
 };
 
-exports.addPlayer = function(id) {
-    players[id] = exports.createNewPlayer(id);
+// MODIFICADO para aceitar 'name'
+exports.addPlayer = function(id, name) {
+    players[id] = exports.createNewPlayer(id, name);
 };
 
 exports.removePlayer = function(id) {

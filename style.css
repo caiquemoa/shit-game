@@ -45,3 +45,127 @@ h1, p {
     /* Garante que o canvas não seja "esticado" pelo flexbox */
     flex-shrink: 0; 
 }
+
+/* Reset básico */
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    overflow: hidden; /* Impede scroll */
+    background-color: #1a1a1a;
+}
+
+/* Oculta o header por padrão, mostramos junto com o canvas */
+#header {
+    display: none; 
+    text-align: center;
+    color: white;
+}
+
+/* Oculta o canvas por padrão */
+#gameCanvas {
+    display: none; /* Começa oculto */
+    background: #000;
+    margin: 0 auto;
+    border: 2px solid #555;
+}
+
+/* --- Estilos da Tela de Login --- */
+
+#start-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    
+    /* Imagem de fundo */
+    background-image: url('ragnarokbackground.jpeg'); 
+    background-size: cover;
+    background-position: center;
+    
+    /* Centralização */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    z-index: 100;
+    transition: opacity 0.5s ease;
+}
+
+#start-menu {
+    background: rgba(0, 0, 0, 0.8);
+    padding: 30px 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    color: white;
+}
+
+#start-menu h2 {
+    margin-top: 0;
+    font-size: 24px;
+    color: #FFD700; /* Dourado */
+    border-bottom: 1px solid #FFD700;
+    padding-bottom: 10px;
+}
+
+#start-menu p {
+    font-size: 14px;
+    color: #ccc;
+    margin-bottom: 20px;
+}
+
+#playerNameInput {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background: #2a2a2a;
+    color: white;
+    font-size: 16px;
+    box-sizing: border-box; /* Garante que o padding não quebre o layout */
+}
+
+#playerNameInput:focus {
+    outline: none;
+    border-color: #FFD700;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+
+#playButton {
+    width: 100%;
+    padding: 12px;
+    background: #4a90e2; /* Azul profissional */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#playButton:hover {
+    background: #357ABD;
+}
+
+#playButton:active {
+    transform: scale(0.98);
+}
+
+/* --- Classes de Controle --- */
+
+/* Esta classe será adicionada via JS para esconder a HUD */
+#start-screen.hidden {
+    opacity: 0;
+    pointer-events: none; /* Impede cliques */
+}
+
+/* Esta classe será adicionada via JS para mostrar o jogo */
+#gameCanvas.visible,
+#header.visible {
+    display: block;
+}

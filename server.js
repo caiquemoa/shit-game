@@ -1,4 +1,4 @@
-// server.js (Atualizado com serving explícito de assets)
+// server.js (Atualizado com serving explícito de assets e lógica de join)
 
 // 1. Configuração de Dependências
 const express = require('express');
@@ -15,7 +15,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Servir os arquivos estáticos da raiz (HTML, JS, CSS, etc.)
+// Servir os arquivos estáticos da raiz (HTML, JS, CSS, e a imagem ragnarokbackground.jpeg)
 app.use(express.static(__dirname));
 
 // Servir explicitamente a pasta de assets (para corrigir 404 em /assets/player/*.png)
@@ -34,17 +34,29 @@ let gameLoopInterval = setInterval(() => {
     gameEngine.serverGameLoop(io);
 }, GAME_TICK_RATE);
 
-// 4. Lógica de Conexão (Socket.IO)
+// 4. Lógica de Conexão (Socket.IO) - MODIFICADO
 io.on('connection', (socket) => {
-    console.log(`Novo jogador conectado: ${socket.id}`);
+    console.log(`Novo jogador conectado: ${socket.id}. Aguardando 'joinGame'...`);
     
-    // Adiciona o jogador ao GameEngine
-    gameEngine.addPlayer(socket.id);
-    
-    // Envia o estado inicial para o novo cliente
-    socket.emit('gameStateUpdate', gameEngine.getGameState());
+    // --- NÃO ADICIONA O JOGADOR IMEDIATAMENTE ---
+    // gameEngine.addPlayer(socket.id);
+    // socket.emit('gameStateUpdate', gameEngine.getGameState());
     
     // --- Handlers de Eventos ---
+
+    // *** NOVO: Handler para o jogador entrar no jogo ***
+    socket.on('joinGame', (data) => {
+        // Garante que um nome exista e limita o tamanho
+        const playerName = (data.name || 'Aventureiro').substring(0, 15);
+        
+        console.log(`Jogador ${socket.id} entrou como: ${playerName}`);
+        
+        // 1. Adiciona o jogador ao GameEngine (agora com nome)
+        gameEngine.addPlayer(socket.id, playerName);
+        
+        // 2. Envia o estado inicial para o novo cliente
+        socket.emit('gameStateUpdate', gameEngine.getGameState());
+    });
     
     socket.on('input', (inputData) => {
         const player = gameEngine.getPlayer(socket.id);
