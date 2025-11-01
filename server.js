@@ -1,98 +1,118 @@
-// server.js (Atualizado com serving explícito de assets e lógica de join)
+// server.js (com endpoint seguro para Developer Mode)
+//
+// Este arquivo espera que existam:
+// - ./constants (exportando PORT, GAME_TICK_RATE)
+// - ./gameEngine (API: addPlayer, getPlayer, createProjectile, performPierce, performSlice, removePlayer, getGameState, serverGameLoop)
+// Se seu projeto usa outro layout, integre apenas a rota abaixo no seu server existente.
+//
 
-// 1. Configuração de Dependências
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const path = require('path');  // Adicionado para paths absolutos
+const fs = require('fs');
+const path = require('path');
 
-// Importa os módulos modularizados
-const { PORT, GAME_TICK_RATE } = require('./constants');
+// Ajuste de acordo com seu projeto:
+const { PORT = 3000, GAME_TICK_RATE = 1000 / 30 } = require('./constants') || {};
 const gameEngine = require('./gameEngine');
 
-// 2. Inicialização do Servidor
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Servir os arquivos estáticos da raiz (HTML, JS, CSS, e a imagem ragnarokbackground.jpeg)
+// Servir estáticos (raiz e assets)
 app.use(express.static(__dirname));
-
-// Servir explicitamente a pasta de assets (para corrigir 404 em /assets/player/*.png)
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
-
-// Opcional: Servir pasta 'public' se existir (para outros arquivos estáticos)
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
-// Opcional: Servir favicon se existir na raiz
-app.get('/favicon.ico', (req, res) => {
-    res.status(204).end();  // Evita 404 no favicon sem arquivo
+// JSON body parser (necessário para receber o dev-save)
+app.use(express.json({ limit: '2mb' }));
+
+// Favicon quick response to avoid 404 logging
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// -----------------------------------------------------------------------------
+// ROTA: __dev_save_file
+// Finalidade: permite que o Developer Mode (no navegador) salve arquivos
+// REGRAS DE SEGURANÇA:
+//  - Só grava dentro da pasta developerMode/
+//  - Bloqueia caminhos com '..'
+//  - Cria o diretório se não existir
+//  - Espera { filename: "developerMode/<nome>", content: "string" }
+// -----------------------------------------------------------------------------
+app.post('/__dev_save_file', (req, res) => {
+  try {
+    const { filename, content } = req.body;
+    if (!filename || typeof content !== 'string') return res.status(400).json({ ok: false, error: 'missing filename or content' });
+
+    if (filename.includes("..")) return res.status(400).json({ ok: false, error: 'invalid filename' });
+
+    // Normalize and require files to be inside developerMode/
+    const normalized = path.posix.normalize(filename.replace(/\\/g, '/'));
+    if (!normalized.startsWith('developerMode/')) return res.status(400).json({ ok: false, error: 'write permitted only to developerMode/' });
+
+    const devDir = path.join(__dirname, 'developerMode');
+    if (!fs.existsSync(devDir)) fs.mkdirSync(devDir, { recursive: true });
+
+    const target = path.join(__dirname, normalized);
+    fs.writeFileSync(target, content, 'utf8');
+
+    return res.json({ ok: true, path: normalized });
+  } catch (err) {
+    console.error("dev save error", err);
+    return res.status(500).json({ ok: false, error: 'server error' });
+  }
 });
 
-// 3. Inicialização e Loop do Jogo
-let gameLoopInterval = setInterval(() => {
-    gameEngine.serverGameLoop(io);
+// --------------------
+// LOOP DO JOGO (server-side)
+// --------------------
+setInterval(() => {
+  try {
+    if (gameEngine && typeof gameEngine.serverGameLoop === 'function') {
+      gameEngine.serverGameLoop(io);
+    }
+  } catch (e) {
+    console.error("game loop error", e);
+  }
 }, GAME_TICK_RATE);
 
-// 4. Lógica de Conexão (Socket.IO) - MODIFICADO
+// --------------------
+// SOCKET.IO HANDLERS
+// --------------------
 io.on('connection', (socket) => {
-    console.log(`Novo jogador conectado: ${socket.id}. Aguardando 'joinGame'...`);
-    
-    // --- NÃO ADICIONA O JOGADOR IMEDIATAMENTE ---
-    // gameEngine.addPlayer(socket.id);
-    // socket.emit('gameStateUpdate', gameEngine.getGameState());
-    
-    // --- Handlers de Eventos ---
+  console.log(`Novo jogador conectado: ${socket.id}`);
 
-    // *** NOVO: Handler para o jogador entrar no jogo ***
-    socket.on('joinGame', (data) => {
-        // Garante que um nome exista e limita o tamanho
-        const playerName = (data.name || 'Aventureiro').substring(0, 15);
-        
-        console.log(`Jogador ${socket.id} entrou como: ${playerName}`);
-        
-        // 1. Adiciona o jogador ao GameEngine (agora com nome)
-        gameEngine.addPlayer(socket.id, playerName);
-        
-        // 2. Envia o estado inicial para o novo cliente
-        socket.emit('gameStateUpdate', gameEngine.getGameState());
-    });
-    
-    // NOVOS: Handlers para ataques
-    socket.on('pierce', () => {
-        gameEngine.performPierce(socket.id);
-    });
-    
-    socket.on('slice', () => {
-        gameEngine.performSlice(socket.id);
-    });
-    
-    socket.on('input', (inputData) => {
-        const player = gameEngine.getPlayer(socket.id);
-        if (player) {
-            player.input = inputData.keys;
-        }
-    });
+  socket.on('joinGame', (data) => {
+    const playerName = (data.name || 'Aventureiro').substring(0, 15);
+    console.log(`Jogador ${socket.id} entrou como: ${playerName}`);
+    try { gameEngine.addPlayer(socket.id, playerName); } catch (e) { console.warn(e); }
+    try { socket.emit('gameStateUpdate', gameEngine.getGameState()); } catch (e) {}
+  });
 
-    socket.on('aimUpdate', (data) => {
-        const player = gameEngine.getPlayer(socket.id);
-        if (player) {
-            player.aimAngle = data.angle;
-        }
-    });
+  socket.on('pierce', () => { try { gameEngine.performPierce(socket.id); } catch (e) {} });
+  socket.on('slice', () => { try { gameEngine.performSlice(socket.id); } catch (e) {} });
+  socket.on('input', (inputData) => {
+    try {
+      const player = gameEngine.getPlayer(socket.id);
+      if (player) player.input = inputData.keys;
+    } catch (e) {}
+  });
+  socket.on('aimUpdate', (data) => {
+    try {
+      const player = gameEngine.getPlayer(socket.id);
+      if (player) player.aimAngle = data.angle;
+    } catch (e) {}
+  });
+  socket.on('shoot', () => { try { gameEngine.createProjectile(socket.id); } catch (e) {} });
 
-    socket.on('shoot', () => {
-        gameEngine.createProjectile(socket.id); 
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`Jogador desconectado: ${socket.id}`);
-        gameEngine.removePlayer(socket.id);
-    });
+  socket.on('disconnect', () => {
+    console.log(`Desconectou: ${socket.id}`);
+    try { gameEngine.removePlayer(socket.id); } catch (e) {}
+  });
 });
 
-// 5. Inicia o Servidor
+// Iniciar servidor
 server.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Acesse http://localhost:${PORT} no seu navegador`);
+  console.log(`Servidor rodando em http://localhost:${PORT} (porta ${PORT})`);
 });

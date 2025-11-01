@@ -7,31 +7,32 @@ import { SPRITE_FRAMES_DATA, spriteImages } from './spriteData.js';
 import { localAimAngle } from './inputHandler.js';
 
 // =========================================
-// VARIÁVEIS DE CALIBRAÇÃO (altere aqui para tunar visualmente)
+// VARIÁVEIS DE CALIBRAÇÃO (agora mutáveis, DevMode-aware)
 // =========================================
+// --- CALIBRATION START ---
 // Side (ataques laterais)
-const SIDE_WIDTH = 64; // Largura do frame side (ajuste se overdraw/ghost; default match sheet)
-const SIDE_HEIGHT = 64; // Altura side (quadrado; aumente para mais protrusão braço)
-const SIDE_OFFSET_Y = -SIDE_HEIGHT; // Offset Y side (centraliza no pivô; tweak se desalinhado)
+let SIDE_WIDTH = 64; // Largura do frame side (ajuste se overdraw/ghost; default match sheet)
+let SIDE_HEIGHT = 64; // Altura side (quadrado; aumente para mais protrusão braço)
+let SIDE_OFFSET_Y = -SIDE_HEIGHT; // Offset Y side (centraliza no pivô; tweak se desalinhado)
 
 // Vertical (up/down)
-const VERTICAL_WIDTH = 64; // Largura vertical (geralmente match side)
-const VERTICAL_HEIGHT = 128; // Altura vertical (protrusão espada; diminua se overdraw legs)
-const VERTICAL_BODY_OFFSET_Y = -SPRITE_HEIGHT; // Offset Y vertical (alinha body à base/idle; ajuste para "entre barra/nome")
+let VERTICAL_WIDTH = 64; // Largura vertical (geralmente match side)
+let VERTICAL_HEIGHT = 128; // Altura vertical (protrusão espada; diminua se overdraw legs)
+let VERTICAL_BODY_OFFSET_Y = -SPRITE_HEIGHT; // Offset Y vertical (alinha body à base/idle; ajuste para "entre barra/nome")
 
 // Cortes para vazamentos/ghosts (perninha residual)
-const BLEED_CUT_SIDE = 4; // Corte width no flip side (aumente para 6-8 se perninha persiste)
-const BLEED_CUT_VERTICAL_DOWN = 4; // Corte height bottom em down (se legs duplicadas; 0 se clean)
+let BLEED_CUT_SIDE = 4; // Corte width no flip side (aumente para 6-8 se perninha persiste)
+let BLEED_CUT_VERTICAL_DOWN = 4; // Corte height bottom em down (se legs duplicadas; 0 se clean)
 
 // Geral
-const CAMERA_LERP_ATTACK = 0.25; // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
-const CAMERA_LERP_IDLE = 0.1; // Lerp em idle/walk
-const BAR_WIDTH = 20; // Largura barra vida (fixa)
-const BAR_Y_OFFSET = -SPRITE_HEIGHT - 5; // Posição Y barra (acima body)
-const MIRA_Y_OFFSET = -SPRITE_HEIGHT / 2; // Posição Y mira (centro base; +5 se quiser mais up)
+let CAMERA_LERP_ATTACK = 0.25; // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
+let CAMERA_LERP_IDLE = 0.1; // Lerp em idle/walk
+let BAR_WIDTH = 20; // Largura barra vida (fixa)
+let BAR_Y_OFFSET = -SPRITE_HEIGHT - 5; // Posição Y barra (acima body)
+let MIRA_Y_OFFSET = -SPRITE_HEIGHT / 2; // Posição Y mira (centro base; +5 se quiser mais up)
+// --- CALIBRATION END ---
 
-// =========================================
-
+// inicializa objetos de runtime
 let players = {};
 let gameMap = [];
 let projectiles = [];
@@ -56,6 +57,56 @@ export function initRenderer(p, gM, proj, id, mw, mh) {
 export function getCameraPosition() {
     return { x: cameraX, y: cameraY };
 }
+
+// atualiza window.GAME_CALIBRATION para leitura fácil por outros módulos / DevMode
+function exposeCalibrationGlobals() {
+    window.GAME_CALIBRATION = {
+        SIDE_WIDTH,
+        SIDE_HEIGHT,
+        SIDE_OFFSET_Y,
+        VERTICAL_WIDTH,
+        VERTICAL_HEIGHT,
+        VERTICAL_BODY_OFFSET_Y,
+        BLEED_CUT_SIDE,
+        BLEED_CUT_VERTICAL_DOWN,
+        CAMERA_LERP_ATTACK,
+        CAMERA_LERP_IDLE,
+        BAR_WIDTH,
+        BAR_Y_OFFSET,
+        MIRA_Y_OFFSET
+    };
+    // tambem expõe variaveis individuais para compatibilidade com código antigo
+    for (const k in window.GAME_CALIBRATION) {
+        window[k] = window.GAME_CALIBRATION[k];
+    }
+}
+exposeCalibrationGlobals();
+
+// escuta DevModeConfigChanged e aplica overrides em runtime
+window.addEventListener("DevModeConfigChanged", (ev) => {
+    try {
+        const o = ev.detail || {};
+        if (o.SIDE_WIDTH !== undefined) SIDE_WIDTH = Number(o.SIDE_WIDTH);
+        if (o.SIDE_HEIGHT !== undefined) SIDE_HEIGHT = Number(o.SIDE_HEIGHT);
+        if (o.SIDE_OFFSET_Y !== undefined) SIDE_OFFSET_Y = Number(o.SIDE_OFFSET_Y);
+        if (o.VERTICAL_WIDTH !== undefined) VERTICAL_WIDTH = Number(o.VERTICAL_WIDTH);
+        if (o.VERTICAL_HEIGHT !== undefined) VERTICAL_HEIGHT = Number(o.VERTICAL_HEIGHT);
+        if (o.VERTICAL_BODY_OFFSET_Y !== undefined) VERTICAL_BODY_OFFSET_Y = Number(o.VERTICAL_BODY_OFFSET_Y);
+        if (o.BLEED_CUT_SIDE !== undefined) BLEED_CUT_SIDE = Number(o.BLEED_CUT_SIDE);
+        if (o.BLEED_CUT_VERTICAL_DOWN !== undefined) BLEED_CUT_VERTICAL_DOWN = Number(o.BLEED_CUT_VERTICAL_DOWN);
+        if (o.CAMERA_LERP_ATTACK !== undefined) CAMERA_LERP_ATTACK = Number(o.CAMERA_LERP_ATTACK);
+        if (o.CAMERA_LERP_IDLE !== undefined) CAMERA_LERP_IDLE = Number(o.CAMERA_LERP_IDLE);
+        if (o.BAR_WIDTH !== undefined) BAR_WIDTH = Number(o.BAR_WIDTH);
+        if (o.BAR_Y_OFFSET !== undefined) BAR_Y_OFFSET = Number(o.BAR_Y_OFFSET);
+        if (o.MIRA_Y_OFFSET !== undefined) MIRA_Y_OFFSET = Number(o.MIRA_Y_OFFSET);
+
+        exposeCalibrationGlobals();
+        // opcional: console log pra confirmar
+        console.log('DevMode update', window.GAME_CALIBRATION);
+    } catch (err) {
+        console.warn('Error applying DevMode overrides', err);
+    }
+});
 
 // Config dinâmica com dims reais dos frames (usa vars de calibração)
 function getAnimationConfig(player, aimAngle = 0) {

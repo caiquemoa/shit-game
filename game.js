@@ -1,147 +1,149 @@
-// game.js (Módulo Principal Corrigido)
-
+// game.js (corrigido e compatível com modo Dev)
 import { initRenderer, renderGame, getCameraPosition } from './renderer.js';
-// Importamos as funções específicas de handler e a nova função disableInput
-import { 
-    initInputHandler, 
-    handleKeyDown, 
-    handleKeyUp, 
-    handleMouseMove, 
-    handleMouseDown, 
-    preventContextMenu,
-    disableInput // NOVO: Para parar o input no Game Over
+import {
+  initInputHandler,
+  handleKeyDown,
+  handleKeyUp,
+  handleMouseMove,
+  handleMouseDown,
+  preventContextMenu,
+  disableInput
 } from './inputHandler.js';
 
-
-// --- Variáveis de Estado Global ---
 let myId = '';
 let players = {};
 let gameMap = [];
 let projectiles = [];
 let mapWidthPixels = 0;
 let mapHeightPixels = 0;
-let camera = { x: 0, y: 0 }; 
+let camera = { x: 0, y: 0 };
+let socket = null;
 
-let socket = null; // Mova o socket para o escopo do módulo
-
-// Elementos da DOM
+// DOM
 const startScreen = document.getElementById('start-screen');
 const playButton = document.getElementById('playButton');
 const playerNameInput = document.getElementById('playerNameInput');
 const gameCanvas = document.getElementById('gameCanvas');
 const header = document.getElementById('header');
 
-// --- ADIÇÃO DE LISTENERS GLOBAIS (Apenas UMA VEZ) ---
-// Adicionar listeners de teclado e mouse UMA ÚNICA VEZ ao carregar o script.
-// Eles só farão efeito se 'gameActive' for true no inputHandler.
+// LISTENERS
 document.addEventListener('keydown', handleKeyDown);
 document.addEventListener('keyup', handleKeyUp);
-
 if (gameCanvas) {
-    gameCanvas.addEventListener('mousemove', handleMouseMove);
-    gameCanvas.addEventListener('mousedown', handleMouseDown);
-    gameCanvas.addEventListener('contextmenu', preventContextMenu); // Para evitar menu de contexto no botão direito
+  gameCanvas.addEventListener('mousemove', handleMouseMove);
+  gameCanvas.addEventListener('mousedown', handleMouseDown);
+  gameCanvas.addEventListener('contextmenu', preventContextMenu);
 }
-// ----------------------------------------------------
 
-// Listener do botão de "Entrar"
+// BOTÃO ENTRAR
 playButton.addEventListener('click', () => {
-    const name = playerNameInput.value.trim();
-    
-    if (name.length > 0 && name.length <= 15) {
-        
-        // Impede cliques múltiplos acidentais
-        playButton.disabled = true; 
-        playerNameInput.disabled = true; 
-
-        // 1. Esconde a HUD
-        startScreen.classList.add('hidden');
-        
-        // 2. Mostra o Canvas e o Header
-        gameCanvas.classList.add('visible');
-        header.classList.add('visible');
-        
-        // 3. Inicia a conexão e o jogo
-        initGame(name); 
-    } else {
-        alert('Por favor, digite um nome (1-15 caracteres).');
-        playerNameInput.focus();
-    }
+  const name = playerNameInput.value.trim();
+  if (name.length > 0 && name.length <= 15) {
+    playButton.disabled = true;
+    playerNameInput.disabled = true;
+    startScreen.classList.add('hidden');
+    gameCanvas.classList.add('visible');
+    header.classList.add('visible');
+    initGame(name);
+  } else {
+    alert('Digite um nome válido (1–15 caracteres).');
+    playerNameInput.focus();
+  }
 });
 
-
-// --- FUNÇÃO PRINCIPAL DO JOGO (Chamada após login) ---
+// --- JOGO PRINCIPAL ---
 function initGame(playerName) {
-    
-    // 1. INICIALIZAÇÃO DA CONEXÃO
-    // NOTA: 'io' é uma função global injetada pelo script do Socket.io no HTML.
-    socket = io(); 
-    console.log('[GAME.JS] Socket.io conectando...');
+  socket = io();
+  console.log('[GAME] Conectando...');
 
-    // Inicializa a lógica de input e renderização, passando o socket e as referências de dados
-    initInputHandler(socket, players, camera);
+  initInputHandler(socket, players, camera);
+  initRenderer(players, gameMap, projectiles, myId, mapWidthPixels, mapHeightPixels);
+
+  socket.on('gameStateUpdate', (data) => {
+    Object.assign(players, data.players);
+    gameMap = data.map;
+    projectiles = data.projectiles || [];
+    mapWidthPixels = data.mapWidth;
+    mapHeightPixels = data.mapHeight;
     initRenderer(players, gameMap, projectiles, myId, mapWidthPixels, mapHeightPixels);
+  });
 
-    // 1. Recebe a atualização de estado do servidor
-    socket.on('gameStateUpdate', (data) => {
-        // ... (resto da função gameStateUpdate, sem alterações)
-        if (Object.keys(players).length === 0 && Object.keys(data.players).length > 0) {
-            console.log('[GAME.JS] Recebido primeiro gameStateUpdate. Jogadores carregados.');
-        }
-        
-        // ATUALIZAÇÃO DOS OBJETOS
-        Object.assign(players, data.players);
-        gameMap = data.map;
-        projectiles = data.projectiles || [];
-        mapWidthPixels = data.mapWidth;
-        mapHeightPixels = data.mapHeight;
-        
-        // Força uma atualização de referência no renderer
-        initRenderer(players, gameMap, projectiles, myId, mapWidthPixels, mapHeightPixels);
-    });
+  socket.on('connect', () => {
+    myId = socket.id;
+    socket.emit('joinGame', { name: playerName });
+    initRenderer(players, gameMap, projectiles, myId, mapWidthPixels, mapHeightPixels);
+  });
 
-    // 2. Recebe o ID na conexão inicial
-    socket.on('connect', () => {
-        myId = socket.id;
-        console.log(`[GAME.JS] Conectado com SUCESSO! Meu ID: ${myId}.`);
-        
-        // Envia o nome escolhido ao servidor
-        socket.emit('joinGame', { name: playerName });
-        
-        initRenderer(players, gameMap, projectiles, myId, mapWidthPixels, mapHeightPixels);
-    });
+  socket.on('gameOver', () => {
+    disableInput();
+    socket?.disconnect();
+    alert(`Fim de jogo, ${playerName}!`);
+    window.location.reload();
+  });
 
-    // Game Over
-    socket.on('gameOver', () => {
-        console.log('[GAME.JS] Game Over recebido. Desconectando...');
-        alert(`Fim de Jogo para ${playerName}! Você morreu. A página será recarregada.`);
-        
-        // *** NOVO: DESATIVAÇÃO E DESCONEXÃO ***
-        disableInput(); // Impede que mais input seja enviado
-        if(socket) {
-            socket.disconnect(); // Finaliza a conexão do socket
-        }
-        // ***************************************
-
-        // Recarregar a página é a forma mais limpa de resetar o estado do cliente
-        window.location.reload(); 
-    });
-
-
-    // O Game Loop do Cliente (Loop de Animação)
-    function gameLoop() {
-        // 1. Renderiza o frame atual
-        renderGame();
-        
-        // 2. Atualiza a referência da câmera (para o inputHandler)
-        Object.assign(camera, getCameraPosition());
-
-        // 3. Solicita o próximo frame
-        requestAnimationFrame(gameLoop);
-    }
-
-    // Inicia o loop de desenho
+  function gameLoop() {
+    renderGame();
+    Object.assign(camera, getCameraPosition());
     requestAnimationFrame(gameLoop);
+  }
+  requestAnimationFrame(gameLoop);
 }
 
-// NOTA: O jogo agora SÓ COMEÇA quando 'initGame()' é chamado pelo listener da HUD.
+// ============================================================
+// --- VARIÁVEIS DE CALIBRAÇÃO (compatível com DevMode) ---
+// ============================================================
+
+(function initializeCalibration() {
+  const SPRITE_HEIGHT = window.SPRITE_HEIGHT || 64; // fallback
+
+  let _SIDE_WIDTH = 64;
+  let _SIDE_HEIGHT = 64;
+  let _SIDE_OFFSET_Y = -_SIDE_HEIGHT;
+  let _VERTICAL_WIDTH = 64;
+  let _VERTICAL_HEIGHT = 128;
+  let _VERTICAL_BODY_OFFSET_Y = -SPRITE_HEIGHT;
+  let _BLEED_CUT_SIDE = 4;
+  let _BLEED_CUT_VERTICAL_DOWN = 4;
+  let _CAMERA_LERP_ATTACK = 0.25;
+  let _CAMERA_LERP_IDLE = 0.1;
+  let _BAR_WIDTH = 20;
+  let _BAR_Y_OFFSET = -SPRITE_HEIGHT - 5;
+  let _MIRA_Y_OFFSET = -SPRITE_HEIGHT / 2;
+
+  function applyOverrides(obj) {
+    if (!obj) return;
+    Object.keys(obj).forEach(k => {
+      if (obj[k] !== undefined) eval(`_${k} = obj[k];`);
+    });
+  }
+
+  try {
+    if (window.DEV_MODE_CONFIG) applyOverrides(window.DEV_MODE_CONFIG);
+  } catch (e) {
+    console.warn("calibration init err", e);
+  }
+
+  window.GAME_CALIBRATION = {
+    SIDE_WIDTH: _SIDE_WIDTH,
+    SIDE_HEIGHT: _SIDE_HEIGHT,
+    SIDE_OFFSET_Y: _SIDE_OFFSET_Y,
+    VERTICAL_WIDTH: _VERTICAL_WIDTH,
+    VERTICAL_HEIGHT: _VERTICAL_HEIGHT,
+    VERTICAL_BODY_OFFSET_Y: _VERTICAL_BODY_OFFSET_Y,
+    BLEED_CUT_SIDE: _BLEED_CUT_SIDE,
+    BLEED_CUT_VERTICAL_DOWN: _BLEED_CUT_VERTICAL_DOWN,
+    CAMERA_LERP_ATTACK: _CAMERA_LERP_ATTACK,
+    CAMERA_LERP_IDLE: _CAMERA_LERP_IDLE,
+    BAR_WIDTH: _BAR_WIDTH,
+    BAR_Y_OFFSET: _BAR_Y_OFFSET,
+    MIRA_Y_OFFSET: _MIRA_Y_OFFSET
+  };
+
+  for (const k in window.GAME_CALIBRATION) window[k] = window.GAME_CALIBRATION[k];
+
+  window.addEventListener("DevModeConfigChanged", ev => {
+    applyOverrides(ev.detail);
+    for (const k in window.GAME_CALIBRATION) window[k] = window.GAME_CALIBRATION[k];
+    console.log("DevMode update", window.GAME_CALIBRATION);
+  });
+})();
