@@ -13,50 +13,55 @@ import { localAimAngle } from './inputHandler.js';
 let CALIBRATION_DATA = {
     // PIERCE - Calibração de Sprites e Hitboxes
     'PIERCE_SIDE': {
-        BLEED_CUT: 4, // Corte (em pixels) para vazamentos/ghosts no flip lateral
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no flip lateral
         FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
         LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
+    // PIERCE - Calibração de Sprites e Hitboxes
     'PIERCE_UP': {
         BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts (geralmente 0 para UP)
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
+    // PIERCE - Calibração de Sprites e Hitboxes
     'PIERCE_DOWN': {
-        BLEED_CUT: 4, // Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
     // SLICE - Calibração de Sprites e Hitboxes
     'SLICE_SIDE': {
-        BLEED_CUT: 4,
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no flip lateral
+        FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
+        LEFT_OFFSET_X: 1, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // SLICE - Calibração de Sprites e Hitboxes
+    'SLICE_UP': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts (geralmente 0 para UP)
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // SLICE - Calibração de Sprites e Hitboxes
+    'SLICE_DOWN': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // FLIP/OFFSET para Base Sprites (IDLE)
+    'IDLE_SIDE': {
         FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
         LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
-        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
-    'SLICE_UP': {
-        BLEED_CUT: 0,
-        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
-    },
-    'SLICE_DOWN': {
-        BLEED_CUT: 4,
-        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
-    },
-    // Configurações de FLIP/OFFSET para Walk/Idle Base Sprites
-    'IDLE_SIDE': {
-        FLIP_OVERRIDE: false,
-        LEFT_OFFSET_X: 0,
-    },
+    // FLIP/OFFSET para Base Sprites (WALK)
     'WALK_SIDE': {
-        FLIP_OVERRIDE: false,
-        LEFT_OFFSET_X: 0,
+        FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
+        LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
     },
     // GENERAL - Ajustes Globais e Câmera
     'GENERAL': {
         CAMERA_LERP_ATTACK: 0.25, // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
-        CAMERA_LERP_IDLE: 0.1, // Lerp em idle/walk
+        CAMERA_LERP_IDLE: 0.25, // Lerp em idle/walk
         BAR_WIDTH: 20, // Largura barra vida (fixa)
         BAR_Y_OFFSET: -37, // Posição Y barra (acima body: -32 -5)
-        MIRA_Y_OFFSET: -16 // Posição Y mira (centro base: -16)
+        MIRA_Y_OFFSET: -16, // Posição Y mira (centro base: -16)
     }
 };
 // --- CALIBRATION END ---

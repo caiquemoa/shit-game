@@ -10,20 +10,60 @@ import { localAimAngle } from './inputHandler.js';
 // VARIÁVEIS DE CALIBRAÇÃO (agora mutáveis, DevMode-aware)
 // =========================================
 // --- CALIBRATION START ---
-let SIDE_WIDTH = 64; // Largura do frame side (ajuste se overdraw/ghost; default match sheet)
-let SIDE_HEIGHT = 64; // Altura side (quadrado; aumente para mais protrusão braço)
-let SIDE_OFFSET_Y = -64; // Offset Y side (centraliza no pivô; tweak se desalinhado)
-let VERTICAL_WIDTH = 64; // Largura vertical (geralmente match side)
-let VERTICAL_HEIGHT = 128; // Altura vertical (protrusão espada; diminua se overdraw legs)
-let VERTICAL_BODY_OFFSET_X = 0; // **NOVA VAR** Offset X vertical (move body horizontalmente em ataques up/down; default 0)
-let VERTICAL_BODY_OFFSET_Y = -64; // Offset Y vertical (alinha body à base/idle; ajuste para "entre barra/nome")
-let BLEED_CUT_SIDE = 4; // Corte width no flip side (aumente para 6-8 se perninha persiste)
-let BLEED_CUT_VERTICAL_DOWN = 4; // Corte height bottom em down (se legs duplicadas; 0 se clean)
-let CAMERA_LERP_ATTACK = 0.25; // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
-let CAMERA_LERP_IDLE = 0.1; // Lerp em idle/walk
-let BAR_WIDTH = 20; // Largura barra vida (fixa)
-let BAR_Y_OFFSET = -34; // Posição Y barra (acima body)
-let MIRA_Y_OFFSET = -32; // Posição Y mira (centro base; +5 se quiser mais up)
+let CALIBRATION_DATA = {
+    // PIERCE - Calibração de Sprites e Hitboxes
+    'PIERCE_SIDE': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no flip lateral
+        FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
+        LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // PIERCE - Calibração de Sprites e Hitboxes
+    'PIERCE_UP': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts (geralmente 0 para UP)
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // PIERCE - Calibração de Sprites e Hitboxes
+    'PIERCE_DOWN': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // SLICE - Calibração de Sprites e Hitboxes
+    'SLICE_SIDE': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no flip lateral
+        FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
+        LEFT_OFFSET_X: 1, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // SLICE - Calibração de Sprites e Hitboxes
+    'SLICE_UP': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts (geralmente 0 para UP)
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // SLICE - Calibração de Sprites e Hitboxes
+    'SLICE_DOWN': {
+        BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)
+        CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
+    },
+    // FLIP/OFFSET para Base Sprites (IDLE)
+    'IDLE_SIDE': {
+        FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
+        LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
+    },
+    // FLIP/OFFSET para Base Sprites (WALK)
+    'WALK_SIDE': {
+        FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
+        LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
+    },
+    // GENERAL - Ajustes Globais e Câmera
+    'GENERAL': {
+        CAMERA_LERP_ATTACK: 0.25, // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
+        CAMERA_LERP_IDLE: 0.25, // Lerp em idle/walk
+        BAR_WIDTH: 20, // Largura barra vida (fixa)
+        BAR_Y_OFFSET: -37, // Posição Y barra (acima body: -32 -5)
+        MIRA_Y_OFFSET: -16, // Posição Y mira (centro base: -16)
+    }
+};
 // --- CALIBRATION END ---
 
 // inicializa objetos de runtime
@@ -35,6 +75,7 @@ let mapWidthPixels = 0;
 let mapHeightPixels = 0;
 let cameraX = 0;
 let cameraY = 0;
+let isDevModeActive = false; // **NOVA VAR: Controla a exibição do delineado**
 
 export function initRenderer(p, gM, proj, id, mw, mh) {
     if (myId !== id && id !== '') {
@@ -54,26 +95,16 @@ export function getCameraPosition() {
 
 // atualiza window.GAME_CALIBRATION para leitura fácil por outros módulos / DevMode
 function exposeCalibrationGlobals() {
-    window.GAME_CALIBRATION = {
-        SIDE_WIDTH,
-        SIDE_HEIGHT,
-        SIDE_OFFSET_Y,
-        VERTICAL_WIDTH,
-        VERTICAL_HEIGHT,
-        VERTICAL_BODY_OFFSET_X, // **NOVO**
-        VERTICAL_BODY_OFFSET_Y,
-        BLEED_CUT_SIDE,
-        BLEED_CUT_VERTICAL_DOWN,
-        CAMERA_LERP_ATTACK,
-        CAMERA_LERP_IDLE,
-        BAR_WIDTH,
-        BAR_Y_OFFSET,
-        MIRA_Y_OFFSET
-    };
-    // tambem expõe variaveis individuais para compatibilidade com código antigo
-    for (const k in window.GAME_CALIBRATION) {
-        window[k] = window.GAME_CALIBRATION[k];
+    window.GAME_CALIBRATION = CALIBRATION_DATA;
+    // Expor variáveis gerais para uso mais limpo no código (ex: BAR_WIDTH)
+    const general = CALIBRATION_DATA['GENERAL'];
+    if (general) {
+        for (const k in general) {
+            window[k] = general[k];
+        }
     }
+    // Expor o estado do Dev Mode
+    isDevModeActive = !!(window.DEV_MODE_CONFIG && window.DEV_MODE_CONFIG.IS_ACTIVE);
 }
 exposeCalibrationGlobals();
 
@@ -81,24 +112,24 @@ exposeCalibrationGlobals();
 window.addEventListener("DevModeConfigChanged", (ev) => {
     try {
         const o = ev.detail || {};
-        if (o.SIDE_WIDTH !== undefined) SIDE_WIDTH = Number(o.SIDE_WIDTH);
-        if (o.SIDE_HEIGHT !== undefined) SIDE_HEIGHT = Number(o.SIDE_HEIGHT);
-        if (o.SIDE_OFFSET_Y !== undefined) SIDE_OFFSET_Y = Number(o.SIDE_OFFSET_Y);
-        if (o.VERTICAL_WIDTH !== undefined) VERTICAL_WIDTH = Number(o.VERTICAL_WIDTH);
-        if (o.VERTICAL_HEIGHT !== undefined) VERTICAL_HEIGHT = Number(o.VERTICAL_HEIGHT);
-        if (o.VERTICAL_BODY_OFFSET_X !== undefined) VERTICAL_BODY_OFFSET_X = Number(o.VERTICAL_BODY_OFFSET_X); // **APLICAÇÃO**
-        if (o.VERTICAL_BODY_OFFSET_Y !== undefined) VERTICAL_BODY_OFFSET_Y = Number(o.VERTICAL_BODY_OFFSET_Y);
-        if (o.BLEED_CUT_SIDE !== undefined) BLEED_CUT_SIDE = Number(o.BLEED_CUT_SIDE);
-        if (o.BLEED_CUT_VERTICAL_DOWN !== undefined) BLEED_CUT_VERTICAL_DOWN = Number(o.BLEED_CUT_VERTICAL_DOWN);
-        if (o.CAMERA_LERP_ATTACK !== undefined) CAMERA_LERP_ATTACK = Number(o.CAMERA_LERP_ATTACK);
-        if (o.CAMERA_LERP_IDLE !== undefined) CAMERA_LERP_IDLE = Number(o.CAMERA_LERP_IDLE);
-        if (o.BAR_WIDTH !== undefined) BAR_WIDTH = Number(o.BAR_WIDTH);
-        if (o.BAR_Y_OFFSET !== undefined) BAR_Y_OFFSET = Number(o.BAR_Y_OFFSET);
-        if (o.MIRA_Y_OFFSET !== undefined) MIRA_Y_OFFSET = Number(o.MIRA_Y_OFFSET);
+        if (o.CALIBRATION_DATA) {
+             // Atualiza apenas as chaves que foram modificadas
+            for (const group in o.CALIBRATION_DATA) {
+                if (CALIBRATION_DATA[group]) {
+                    Object.assign(CALIBRATION_DATA[group], o.CALIBRATION_DATA[group]);
+                } else {
+                    // Adiciona novos grupos se ainda não existirem (ex: IDLE_SIDE/WALK_SIDE)
+                    CALIBRATION_DATA[group] = o.CALIBRATION_DATA[group];
+                }
+            }
+        }
+        if (o.IS_ACTIVE !== undefined) {
+            isDevModeActive = o.IS_ACTIVE; // **APLICAÇÃO DO ESTADO DEV MODE**
+        }
 
         exposeCalibrationGlobals();
         // opcional: console log pra confirmar
-        console.log('DevMode update', window.GAME_CALIBRATION);
+        // console.log('DevMode update', window.GAME_CALIBRATION);
     } catch (err) {
         console.warn('Error applying DevMode overrides', err);
     }
@@ -108,43 +139,84 @@ window.addEventListener("DevModeConfigChanged", (ev) => {
 function getAnimationConfig(player, aimAngle = 0) {
     const state = player.state || 'idle';
     const direction = player.direction || 'down';
-    let imgKey, frameKey, w, h, offsetX, offsetY, flip;
+    let imgKey, frameKey, flip;
+    let bleedCut = 0;
+    let cutAlignment = 'START'; // Default
+    let flipOverride = false;
+    let leftOffsetX = 0;
 
     if (state === 'pierce' || state === 'slice') {
-        const attackType = state === 'pierce' ? 'Pierce' : 'Slice';
+        const attackType = state === 'pierce' ? 'PIERCE' : 'SLICE';
         const absCos = Math.abs(Math.cos(aimAngle));
         const absSin = Math.abs(Math.sin(aimAngle));
-        if (absSin > absCos) {
-            const vDir = Math.sin(aimAngle) > 0 ? 'Down' : 'Up';
-            imgKey = `${attackType}_${vDir}`;
-            frameKey = `${attackType.toUpperCase()}_${vDir.toUpperCase()}`;
-            w = VERTICAL_WIDTH;
-            h = VERTICAL_HEIGHT;
-            offsetX = VERTICAL_BODY_OFFSET_X - w / 2; // **USO DO X OFFSET**
-            offsetY = VERTICAL_BODY_OFFSET_Y; // Calibrado para body no slot
-        } else {
-            imgKey = `${attackType}_Side`;
-            frameKey = `${attackType.toUpperCase()}_SIDE`;
-            w = SIDE_WIDTH;
-            h = SIDE_HEIGHT;
-            flip = Math.cos(aimAngle) < 0;
-            offsetX = -w / 2;
-            offsetY = SIDE_OFFSET_Y;
+        
+        let configKey;
+        if (absSin > absCos) { // Vertical Attack
+            const vDir = Math.sin(aimAngle) > 0 ? 'DOWN' : 'UP';
+            configKey = `${attackType}_${vDir}`;
+            imgKey = `${attackType.charAt(0).toUpperCase() + attackType.slice(1).toLowerCase()}_${vDir.charAt(0).toUpperCase() + vDir.slice(1).toLowerCase()}`;
+        } else { // Side Attack
+            configKey = `${attackType}_SIDE`;
+            imgKey = `${attackType.charAt(0).toUpperCase() + attackType.slice(1).toLowerCase()}_Side`;
         }
+
+        const config = CALIBRATION_DATA[configKey] || {};
+
+        frameKey = configKey;
+        bleedCut = config.BLEED_CUT || 0;
+        cutAlignment = config.CUT_ALIGNMENT || 'START';
+
+        // Lógica de FLIP e OFFSET X
+        flipOverride = config.FLIP_OVERRIDE === true;
+        leftOffsetX = config.LEFT_OFFSET_X || 0;
+        const facingLeft = Math.cos(aimAngle) < 0;
+
+        if (configKey.includes('_SIDE')) {
+            if (flipOverride) {
+                // Tenta usar _LEFT se existir
+                const leftKey = configKey + '_LEFT';
+                if (SPRITE_FRAMES_DATA[leftKey] && facingLeft) {
+                    frameKey = leftKey;
+                    flip = false;
+                } else if (facingLeft) {
+                    // Se não existir _LEFT, usa normal sem flip, mas aplica leftOffsetX depois
+                    flip = false;
+                } else {
+                    flip = false;
+                }
+            } else {
+                // Usa espelhamento automático (o que o usuário diz que não funciona, mas é o padrão)
+                flip = facingLeft;
+            }
+        } else {
+            // UP/DOWN attacks: no flip
+            flip = false;
+        }
+
     } else {
-        // Walk/idle: dims originais (não calibradas, mas pode adicionar se quiser)
+        // Walk/idle: dims originais
         const animName = state === 'walk' ? 'Walk' : 'Idle';
         const dirName = direction === 'side_right' || direction === 'side_left' ? 'Side' : direction.charAt(0).toUpperCase() + direction.slice(1);
         imgKey = `${animName}_${dirName}`;
         frameKey = `${state.toUpperCase()}_${dirName.toUpperCase().replace('SIDE_', 'SIDE')}`;
-        w = SPRITE_WIDTH; // 16 original (de config.js)
-        h = SPRITE_HEIGHT; // 32 (de config.js)
-        offsetX = -w / 2;
-        offsetY = -h;
-        flip = direction === 'side_left';
+
+        // Lógica de FLIP e OFFSET X para base
+        const isSide = direction === 'side_right' || direction === 'side_left';
+        const sideConfig = CALIBRATION_DATA[frameKey] || {}; // Usa o config (se existir)
+        
+        flipOverride = sideConfig.FLIP_OVERRIDE === true;
+        leftOffsetX = sideConfig.LEFT_OFFSET_X || 0;
+        
+        flip = direction === 'side_left'; // flip automático
+
+        if (isSide && flipOverride) {
+            // Desativa espelhamento automático, usa offset para left
+            flip = false;
+        }
+        // else: usa o flip automático padrão
     }
 
-    return { image: spriteImages[imgKey], frameKey, w, h, offsetX, offsetY, flip };
+    return { image: spriteImages[imgKey], frameKey, flip, bleedCut, cutAlignment, flipOverride, leftOffsetX };
 }
 
 // Desenha ANIMAÇÃO (ÚLTIMA, ACIMA – PIVOT CORRETO)
@@ -152,46 +224,83 @@ function drawAttackAnimation(player, aimAngle) {
     if (player.state !== 'pierce' && player.state !== 'slice') return;
 
     const config = getAnimationConfig(player, aimAngle);
-    const { image, frameKey, w, h, offsetX, offsetY, flip } = config;
+    const { image, frameKey, flip, bleedCut, cutAlignment, flipOverride, leftOffsetX } = config;
 
     if (!image || !image.complete) return;
 
     const frameCoords = SPRITE_FRAMES_DATA[frameKey];
     if (!frameCoords || frameCoords.length === 0) return;
 
-    const [srcX, srcY] = frameCoords[player.frame % frameCoords.length];
+    const frameIndex = player.frame % frameCoords.length;
+    const frame = frameCoords[frameIndex];
+    let srcX, srcY, w, h, frameOffX = 0, frameOffY = 0;
+
+    if (frame.length > 2) {
+        [srcX, srcY, w, h, frameOffX, frameOffY] = frame;
+    } else {
+        [srcX, srcY] = frame;
+        w = 64; // Fallback (não deve ocorrer para attacks)
+        h = 64;
+    }
+
+    let drawOffsetX = -w / 2 + frameOffX;
+    let drawOffsetY = -h + frameOffY;
+
+    const facingLeft = Math.cos(aimAngle) < 0;
+    if (flipOverride && facingLeft && !frameKey.endsWith('_LEFT')) {
+        drawOffsetX += leftOffsetX;
+    }
 
     ctx.save();
-    const isVerticalAttack = frameKey.includes('_UP') || frameKey.includes('_DOWN');
-    const isSideAttack = frameKey.includes('_SIDE');
-
+    
     // Centraliza o desenho para flips laterais, usando as dimensões calibradas
-    if (flip && isSideAttack) {
-        const sourceW = w - BLEED_CUT_SIDE;
-        const sourceSrcX = srcX + BLEED_CUT_SIDE;
-        // Ponto de pivô para o flip lateral é o centro horizontal da imagem calibrada, na altura do offsetY + metade da altura calibrada
-        const centerX = 0; // Onde o corpo deveria estar horizontalmente
-        const centerY = offsetY + h / 2; // Onde o centro da imagem calibrada está verticalmente
+    if (flip && frameKey.includes('_SIDE')) {
+        // Assume que só ataques laterais (SIDE) usam flip com BLEED_CUT
+        const sourceW = w - bleedCut;
+        let sourceSrcX = srcX;
+
+        // Implementa CUT_ALIGNMENT para o flip lateral (horizontal)
+        if (cutAlignment === 'START') { // Corta do lado 'START' (Esquerda do source)
+            sourceSrcX = srcX + bleedCut;
+        } 
+        // Se 'END', sourceSrcX permanece srcX (corta da Direita)
+        
+        // Ponto de pivô para o flip é o centro horizontal da imagem
+        const centerX = drawOffsetX + w / 2;
+        const centerY = drawOffsetY + h / 2;
 
         ctx.translate(centerX, centerY);
         ctx.scale(-1, 1);
+        // Desenha a partir do centro do contexto traduzido
         ctx.drawImage(image, sourceSrcX, srcY, sourceW, h, -w / 2, -h / 2, w, h);
-    } else if (frameKey.includes('_DOWN')) {
-        // Corte calibrado para down
-        const sourceH = h - BLEED_CUT_VERTICAL_DOWN;
-        const sourceSrcY = srcY + BLEED_CUT_VERTICAL_DOWN;
-        ctx.drawImage(image, srcX, sourceSrcY, w, sourceH, offsetX, offsetY, w, h);
-    } else {
-        // Up ou non-flip: full draw
-        if (flip) { // Flip vertical (Up) não é usual, mas mantemos o código base
-            const centerX = 0;
-            const centerY = offsetY + h / 2;
-            ctx.translate(centerX, centerY);
-            ctx.scale(-1, 1);
-            ctx.drawImage(image, srcX, srcY, w, h, -w / 2, -h / 2, w, h);
-        } else {
-            ctx.drawImage(image, srcX, srcY, w, h, offsetX, offsetY, w, h);
+        
+    } else if (bleedCut > 0 && (frameKey.includes('_DOWN') || frameKey.includes('_UP') || frameKey.includes('_SIDE'))) {
+        // Corte calibrado para vertical (up/down) ou lateral sem flip
+
+        let sourceW = w;
+        let sourceH = h;
+        let sourceSrcX = srcX;
+        let sourceSrcY = srcY;
+        
+        if (frameKey.includes('_SIDE')) {
+            // Horizontal cut without flip
+            sourceW = w - bleedCut;
+            if (cutAlignment === 'START') { // Corta da esquerda
+                sourceSrcX = srcX + bleedCut;
+            } // Se 'END', corta da direita (sourceSrcX = srcX)
+            
+        } else { // Vertical cut (UP/DOWN)
+            sourceH = h - bleedCut;
+            if (cutAlignment === 'START') { // Corta de 'START' (Top)
+                sourceSrcY = srcY + bleedCut;
+            } // Se 'END', corta de 'END' (Bottom) (sourceSrcY = srcY)
         }
+
+        ctx.drawImage(image, sourceSrcX, sourceSrcY, sourceW, sourceH, drawOffsetX, drawOffsetY, w, h);
+
+    } else {
+        // Full draw (ou padrão sem corte/flip)
+        ctx.drawImage(image, srcX, srcY, w, h, drawOffsetX, drawOffsetY, w, h);
     }
     ctx.restore();
 }
@@ -201,28 +310,44 @@ function drawBaseSprite(player) {
     if (player.state === 'pierce' || player.state === 'slice') return; // Skip base durante ataque
 
     const config = getAnimationConfig(player, 0); // Config de base não usa aimAngle
-    const { image, frameKey, w, h, offsetX, offsetY, flip } = config;
+    const { image, frameKey, flip, flipOverride, leftOffsetX } = config;
 
     if (!image || !image.complete) return;
 
     const frameCoords = SPRITE_FRAMES_DATA[frameKey];
     if (!frameCoords || frameCoords.length === 0) return;
 
-    const [srcX, srcY] = frameCoords[player.frame % frameCoords.length];
+    const frameIndex = player.frame % frameCoords.length;
+    const frame = frameCoords[frameIndex];
+    let srcX, srcY, w = SPRITE_WIDTH, h = SPRITE_HEIGHT, frameOffX = 0, frameOffY = 0;
+
+    if (frame.length > 2) {
+        [srcX, srcY, w, h, frameOffX, frameOffY] = frame;
+    } else {
+        [srcX, srcY] = frame;
+    }
+
+    let drawOffsetX = -w / 2 + frameOffX;
+    let drawOffsetY = -h + frameOffY;
+
+    const direction = player.direction || 'down';
+    const isSide = direction === 'side_right' || direction === 'side_left';
+    const facingLeft = direction === 'side_left';
+
+    if (isSide && flipOverride && facingLeft) {
+        drawOffsetX += leftOffsetX;
+    }
 
     ctx.save();
-    // Apenas para Idle/Walk, usamos os offsets de sprite fixos (config.js)
-    // Se quiser aplicar VERTICAL_BODY_OFFSET_X ou Y para base, o lugar seria aqui
-    // Por enquanto, mantenho o offsetX/Y padrão para idle/walk, que é -SPRITE_WIDTH/2 e -SPRITE_HEIGHT
-    const centerX = 0;
-    const centerY = offsetY + h / 2;
+    const centerX = drawOffsetX + w / 2; // Centralizado horizontalmente
+    const centerY = drawOffsetY + h / 2; // Centro da altura da base
 
     if (flip) {
         ctx.translate(centerX, centerY);
         ctx.scale(-1, 1);
         ctx.drawImage(image, srcX, srcY, w, h, -w / 2, -h / 2, w, h);
     } else {
-        ctx.drawImage(image, srcX, srcY, w, h, offsetX, offsetY, w, h);
+        ctx.drawImage(image, srcX, srcY, w, h, drawOffsetX, drawOffsetY, w, h);
     }
     ctx.restore();
 }
@@ -249,10 +374,43 @@ function drawProjectiles() {
 }
 
 function drawPlayers() {
+    // Busca os valores gerais para evitar erro de referência
+    const general = CALIBRATION_DATA['GENERAL'] || {};
+    const BAR_WIDTH = general.BAR_WIDTH || 20;
+    const BAR_Y_OFFSET = general.BAR_Y_OFFSET || -37;
+    const MIRA_Y_OFFSET = general.MIRA_Y_OFFSET || -16;
+    
     for (const id in players) {
         const player = players[id];
         const aimAngle = player.aimAngle || localAimAngle || 0;
         const config = getAnimationConfig(player, aimAngle);
+
+        let visualW = SPRITE_WIDTH;
+        let visualH = SPRITE_HEIGHT;
+        let visualOffsetX = -SPRITE_WIDTH / 2;
+        let visualOffsetY = -SPRITE_HEIGHT;
+
+        // Para devmode boundaries, usa dims do frame atual (se attack)
+        if (player.state === 'pierce' || player.state === 'slice') {
+            const frameCoords = SPRITE_FRAMES_DATA[config.frameKey];
+            if (frameCoords) {
+                const frame = frameCoords[player.frame % frameCoords.length];
+                if (frame.length > 2) {
+                    [, , visualW, visualH] = frame;
+                }
+                const facingLeft = Math.cos(aimAngle) < 0;
+                let frameOffX = 0;
+                let frameOffY = 0;
+                if (frame.length > 4) {
+                    [, , , , frameOffX, frameOffY] = frame; // Destruturação completa para evitar índice errado
+                }
+                visualOffsetX = -visualW / 2 + frameOffX;
+                visualOffsetY = -visualH + frameOffY;
+                if (config.flipOverride && facingLeft && !config.frameKey.endsWith('_LEFT')) {
+                    visualOffsetX += config.leftOffsetX;
+                }
+            }
+        }
 
         ctx.save();
         ctx.translate(player.x, player.y);
@@ -264,32 +422,7 @@ function drawPlayers() {
         drawAttackAnimation(player, aimAngle);
         
         // --- VISUALIZAÇÃO DE BOUNDARIES CALIBRADAS (APENAS PARA DEV MODE) ---
-        // Desenha linhas de calibração usando os offsets calibrados
-        if (window.GAME_CALIBRATION) {
-            const calib = window.GAME_CALIBRATION;
-            let visualW, visualH, visualOffsetX, visualOffsetY;
-
-            if (player.state === 'pierce' || player.state === 'slice') {
-                const absCos = Math.abs(Math.cos(aimAngle));
-                const absSin = Math.abs(Math.sin(aimAngle));
-                if (absSin > absCos) { // Vertical Attack
-                    visualW = calib.VERTICAL_WIDTH;
-                    visualH = calib.VERTICAL_HEIGHT;
-                    visualOffsetX = calib.VERTICAL_BODY_OFFSET_X - visualW / 2;
-                    visualOffsetY = calib.VERTICAL_BODY_OFFSET_Y;
-                } else { // Side Attack
-                    visualW = calib.SIDE_WIDTH;
-                    visualH = calib.SIDE_HEIGHT;
-                    visualOffsetX = -visualW / 2;
-                    visualOffsetY = calib.SIDE_OFFSET_Y;
-                }
-            } else { // Idle/Walk (Base)
-                visualW = SPRITE_WIDTH;
-                visualH = SPRITE_HEIGHT;
-                visualOffsetX = -visualW / 2;
-                visualOffsetY = -visualH;
-            }
-
+        if (isDevModeActive) { 
             // Linhas de calibração em tempo real
             ctx.strokeStyle = '#f0f'; // Cor para visualização (magenta)
             ctx.lineWidth = 1;
@@ -338,6 +471,10 @@ function drawPlayers() {
 export function renderGame() {
     const myPlayer = players[myId];
     if (myPlayer) {
+        const general = CALIBRATION_DATA['GENERAL'] || {};
+        const CAMERA_LERP_ATTACK = general.CAMERA_LERP_ATTACK || 0.25;
+        const CAMERA_LERP_IDLE = general.CAMERA_LERP_IDLE || 0.1;
+
         const baseCenterOffsetY = -SPRITE_HEIGHT / 2; // Fixo base
         let targetX = myPlayer.x - CANVAS_WIDTH / 2;
         let targetY = myPlayer.y + baseCenterOffsetY - CANVAS_HEIGHT / 2;
