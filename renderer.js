@@ -50,11 +50,11 @@ function getAnimationConfig(player, aimAngle = 0) {
         } else {
             imgKey = `${attackType}_Side`;
             frameKey = `${attackType.toUpperCase()}_SIDE`;
-            w = 128; // Largura maior para side
-            h = 64;
+            w = 64; // Corrigido: Match frame sheet size (64px para evitar overdraw/duplicata)
+            h = 64; // Quadrado para side; flip cuida da direção
             flip = Math.cos(aimAngle) < 0;
         }
-        offsetX = -w / 2 + (flip ? 2 : 0); // +2px compensação bleed left
+        offsetX = -w / 2; // Centralizado sempre; pivô cuida do flip sem deslocamento
         offsetY = -h;
     } else {
         // Walk/idle: dims originais
@@ -82,16 +82,16 @@ function drawAttackAnimation(player, aimAngle) {
     if (!image || !image.complete) return;
 
     const frameCoords = SPRITE_FRAMES_DATA[frameKey];
-    if (!frameCoords) return;
+    if (!frameCoords || frameCoords.length === 0) return;
 
     const [srcX, srcY] = frameCoords[player.frame % frameCoords.length];
 
     ctx.save();
-    const centerX = 0; // Centro X dos pés
-    const centerY = offsetY + h / 2; // Centro Y da sprite
+    const centerX = 0;
+    const centerY = offsetY + h / 2;
 
     if (flip) {
-        // PIVOT NO CENTRO REAL (sem distortion)
+        // PIVOT NO CENTRO REAL (sem distortion); sem corte bleed (não necessário com dims corretas)
         ctx.translate(centerX, centerY);
         ctx.scale(-1, 1);
         ctx.drawImage(image, srcX, srcY, w, h, -w / 2, -h / 2, w, h);
@@ -108,10 +108,10 @@ function drawBaseSprite(player) {
     const config = getAnimationConfig(player, 0);
     const { image, frameKey, w, h, offsetX, offsetY, flip } = config;
 
-    if (!image || !image.complete) return; // Sem fallback visual
+    if (!image || !image.complete) return;
 
     const frameCoords = SPRITE_FRAMES_DATA[frameKey];
-    if (!frameCoords) return;
+    if (!frameCoords || frameCoords.length === 0) return;
 
     const [srcX, srcY] = frameCoords[player.frame % frameCoords.length];
 
@@ -165,15 +165,15 @@ function drawPlayers() {
         // ANIMAÇÃO DE ATAQUE ÚLTIMA (acima, sem corte)
         drawAttackAnimation(player, aimAngle);
 
-        // FLASH SOBRE ANIMAÇÃO
+        // FLASH SOBRE ANIMAÇÃO (usa config attack para cobrir área maior se vertical)
         if (player.flashRedUntil && Date.now() < player.flashRedUntil) {
             ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
             ctx.fillRect(config.offsetX, config.offsetY, config.w, config.h);
         }
 
-        // BARRA ACIMA DA ANIMAÇÃO
-        const barW = Math.max(20, config.w * 0.3);
-        const barY = config.offsetY - 5;
+        // BARRA ACIMA DA ANIMAÇÃO (fixa em base para evitar distorção/dobro de tamanho)
+        const barW = 20; // Fixo, independente de w attack
+        const barY = -SPRITE_HEIGHT - 5; // Posição base (acima da idle)
         ctx.fillStyle = 'red';
         ctx.fillRect(-barW / 2, barY, barW, 3);
         ctx.fillStyle = 'lime';
@@ -206,16 +206,17 @@ function drawPlayers() {
 export function renderGame() {
     const myPlayer = players[myId];
     if (myPlayer) {
-        const aimAngle = myPlayer.aimAngle || 0;
-        const config = getAnimationConfig(myPlayer, aimAngle);
+        const baseCenterOffsetY = -SPRITE_HEIGHT / 2; // Sempre segue centro da base (evita pulo)
         let targetX = myPlayer.x - CANVAS_WIDTH / 2;
-        let targetY = (myPlayer.y + config.offsetY + config.h / 2) - CANVAS_HEIGHT / 2;
+        let targetY = myPlayer.y + baseCenterOffsetY - CANVAS_HEIGHT / 2;
 
         targetX = Math.max(0, Math.min(targetX, mapWidthPixels - CANVAS_WIDTH));
         targetY = Math.max(0, Math.min(targetY, mapHeightPixels - CANVAS_HEIGHT));
 
-        cameraX += (targetX - cameraX) * 0.1;
-        cameraY += (targetY - cameraY) * 0.1;
+        // Lerp dinâmico: mais rápido em ataques
+        const lerpSpeed = (myPlayer.state === 'pierce' || myPlayer.state === 'slice') ? 0.25 : 0.1;
+        cameraX += (targetX - cameraX) * lerpSpeed;
+        cameraY += (targetY - cameraY) * lerpSpeed;
     }
 
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);

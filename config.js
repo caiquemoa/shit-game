@@ -14,7 +14,7 @@ export const GRID_SIZE = 32;
 
 // --- Configurações de Sprite (ATUALIZADO PARA 16x34) ---
 export const SPRITE_WIDTH = 16;
-export const SPRITE_HEIGHT = 34;
+export const SPRITE_HEIGHT = 32;
 
 // CORREÇÃO DE POSICIONAMENTO:
 // (0, 0) no contexto transladado (player.x, player.y) é os PÉS.
