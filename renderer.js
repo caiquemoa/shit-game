@@ -6,6 +6,32 @@ import {
 import { SPRITE_FRAMES_DATA, spriteImages } from './spriteData.js';
 import { localAimAngle } from './inputHandler.js';
 
+// =========================================
+// VARIÁVEIS DE CALIBRAÇÃO (altere aqui para tunar visualmente)
+// =========================================
+// Side (ataques laterais)
+const SIDE_WIDTH = 64; // Largura do frame side (ajuste se overdraw/ghost; default match sheet)
+const SIDE_HEIGHT = 64; // Altura side (quadrado; aumente para mais protrusão braço)
+const SIDE_OFFSET_Y = -SIDE_HEIGHT; // Offset Y side (centraliza no pivô; tweak se desalinhado)
+
+// Vertical (up/down)
+const VERTICAL_WIDTH = 64; // Largura vertical (geralmente match side)
+const VERTICAL_HEIGHT = 128; // Altura vertical (protrusão espada; diminua se overdraw legs)
+const VERTICAL_BODY_OFFSET_Y = -SPRITE_HEIGHT; // Offset Y vertical (alinha body à base/idle; ajuste para "entre barra/nome")
+
+// Cortes para vazamentos/ghosts (perninha residual)
+const BLEED_CUT_SIDE = 4; // Corte width no flip side (aumente para 6-8 se perninha persiste)
+const BLEED_CUT_VERTICAL_DOWN = 4; // Corte height bottom em down (se legs duplicadas; 0 se clean)
+
+// Geral
+const CAMERA_LERP_ATTACK = 0.25; // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
+const CAMERA_LERP_IDLE = 0.1; // Lerp em idle/walk
+const BAR_WIDTH = 20; // Largura barra vida (fixa)
+const BAR_Y_OFFSET = -SPRITE_HEIGHT - 5; // Posição Y barra (acima body)
+const MIRA_Y_OFFSET = -SPRITE_HEIGHT / 2; // Posição Y mira (centro base; +5 se quiser mais up)
+
+// =========================================
+
 let players = {};
 let gameMap = [];
 let projectiles = [];
@@ -31,7 +57,7 @@ export function getCameraPosition() {
     return { x: cameraX, y: cameraY };
 }
 
-// Config dinâmica com dims reais dos frames (sem resize global)
+// Config dinâmica com dims reais dos frames (usa vars de calibração)
 function getAnimationConfig(player, aimAngle = 0) {
     const state = player.state || 'idle';
     const direction = player.direction || 'down';
@@ -45,19 +71,20 @@ function getAnimationConfig(player, aimAngle = 0) {
             const vDir = Math.sin(aimAngle) > 0 ? 'Down' : 'Up';
             imgKey = `${attackType}_${vDir}`;
             frameKey = `${attackType.toUpperCase()}_${vDir.toUpperCase()}`;
-            w = 64; // Dims reais vertical (de coords ~64 larg)
-            h = 128; // Altura maior
+            w = VERTICAL_WIDTH;
+            h = VERTICAL_HEIGHT;
+            offsetY = VERTICAL_BODY_OFFSET_Y; // Calibrado para body no slot
         } else {
             imgKey = `${attackType}_Side`;
             frameKey = `${attackType.toUpperCase()}_SIDE`;
-            w = 64; // Corrigido: Match frame sheet size (64px para evitar overdraw/duplicata)
-            h = 64; // Quadrado para side; flip cuida da direção
+            w = SIDE_WIDTH;
+            h = SIDE_HEIGHT;
             flip = Math.cos(aimAngle) < 0;
+            offsetY = SIDE_OFFSET_Y;
         }
-        offsetX = -w / 2; // Centralizado sempre; pivô cuida do flip sem deslocamento
-        offsetY = -h;
+        offsetX = -w / 2;
     } else {
-        // Walk/idle: dims originais
+        // Walk/idle: dims originais (não calibradas, mas pode adicionar se quiser)
         const animName = state === 'walk' ? 'Walk' : 'Idle';
         const dirName = direction === 'side_right' || direction === 'side_left' ? 'Side' : direction.charAt(0).toUpperCase() + direction.slice(1);
         imgKey = `${animName}_${dirName}`;
@@ -90,13 +117,27 @@ function drawAttackAnimation(player, aimAngle) {
     const centerX = 0;
     const centerY = offsetY + h / 2;
 
-    if (flip) {
-        // PIVOT NO CENTRO REAL (sem distortion); sem corte bleed (não necessário com dims corretas)
+    if (flip && config.frameKey.includes('_SIDE')) {
+        // Corte calibrado para side flip
+        const sourceW = w - BLEED_CUT_SIDE;
+        const sourceSrcX = srcX + BLEED_CUT_SIDE;
         ctx.translate(centerX, centerY);
         ctx.scale(-1, 1);
-        ctx.drawImage(image, srcX, srcY, w, h, -w / 2, -h / 2, w, h);
+        ctx.drawImage(image, sourceSrcX, srcY, sourceW, h, -w / 2, -h / 2, w, h);
+    } else if (config.frameKey.includes('_DOWN')) {
+        // Corte calibrado para down
+        const sourceH = h - BLEED_CUT_VERTICAL_DOWN;
+        const sourceSrcY = srcY + BLEED_CUT_VERTICAL_DOWN;
+        ctx.drawImage(image, srcX, sourceSrcY, w, sourceH, offsetX, offsetY, w, h);
     } else {
-        ctx.drawImage(image, srcX, srcY, w, h, offsetX, offsetY, w, h);
+        // Up ou non-flip: full draw
+        if (flip) {
+            ctx.translate(centerX, centerY);
+            ctx.scale(-1, 1);
+            ctx.drawImage(image, srcX, srcY, w, h, -w / 2, -h / 2, w, h);
+        } else {
+            ctx.drawImage(image, srcX, srcY, w, h, offsetX, offsetY, w, h);
+        }
     }
     ctx.restore();
 }
@@ -165,19 +206,19 @@ function drawPlayers() {
         // ANIMAÇÃO DE ATAQUE ÚLTIMA (acima, sem corte)
         drawAttackAnimation(player, aimAngle);
 
-        // FLASH SOBRE ANIMAÇÃO (usa config attack para cobrir área maior se vertical)
+        // FLASH SOBRE ANIMAÇÃO (fixo em base para evitar pulo)
         if (player.flashRedUntil && Date.now() < player.flashRedUntil) {
+            const baseOffsetX = -SPRITE_WIDTH / 2;
+            const baseOffsetY = -SPRITE_HEIGHT;
             ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-            ctx.fillRect(config.offsetX, config.offsetY, config.w, config.h);
+            ctx.fillRect(baseOffsetX, baseOffsetY, SPRITE_WIDTH, SPRITE_HEIGHT);
         }
 
-        // BARRA ACIMA DA ANIMAÇÃO (fixa em base para evitar distorção/dobro de tamanho)
-        const barW = 20; // Fixo, independente de w attack
-        const barY = -SPRITE_HEIGHT - 5; // Posição base (acima da idle)
+        // BARRA ACIMA DA ANIMAÇÃO (calibrada)
         ctx.fillStyle = 'red';
-        ctx.fillRect(-barW / 2, barY, barW, 3);
+        ctx.fillRect(-BAR_WIDTH / 2, BAR_Y_OFFSET, BAR_WIDTH, 3);
         ctx.fillStyle = 'lime';
-        ctx.fillRect(-barW / 2, barY, (player.health / 100) * barW, 3);
+        ctx.fillRect(-BAR_WIDTH / 2, BAR_Y_OFFSET, (player.health / 100) * BAR_WIDTH, 3);
 
         // NOME ABAIXO
         ctx.fillStyle = id === myId ? '#FFFF00' : '#FFFFFF';
@@ -187,10 +228,10 @@ function drawPlayers() {
 
         ctx.restore();
 
-        // MIRA ACIMA
+        // MIRA ACIMA (calibrada em base)
         if (id === myId) {
             ctx.save();
-            ctx.translate(player.x, player.y + config.offsetY + config.h / 2);
+            ctx.translate(player.x, player.y + MIRA_Y_OFFSET);
             ctx.rotate(aimAngle);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.lineWidth = 1;
@@ -206,15 +247,15 @@ function drawPlayers() {
 export function renderGame() {
     const myPlayer = players[myId];
     if (myPlayer) {
-        const baseCenterOffsetY = -SPRITE_HEIGHT / 2; // Sempre segue centro da base (evita pulo)
+        const baseCenterOffsetY = -SPRITE_HEIGHT / 2; // Fixo base
         let targetX = myPlayer.x - CANVAS_WIDTH / 2;
         let targetY = myPlayer.y + baseCenterOffsetY - CANVAS_HEIGHT / 2;
 
         targetX = Math.max(0, Math.min(targetX, mapWidthPixels - CANVAS_WIDTH));
         targetY = Math.max(0, Math.min(targetY, mapHeightPixels - CANVAS_HEIGHT));
 
-        // Lerp dinâmico: mais rápido em ataques
-        const lerpSpeed = (myPlayer.state === 'pierce' || myPlayer.state === 'slice') ? 0.25 : 0.1;
+        // Lerp calibrado
+        const lerpSpeed = (myPlayer.state === 'pierce' || myPlayer.state === 'slice') ? CAMERA_LERP_ATTACK : CAMERA_LERP_IDLE;
         cameraX += (targetX - cameraX) * lerpSpeed;
         cameraY += (targetY - cameraY) * lerpSpeed;
     }
