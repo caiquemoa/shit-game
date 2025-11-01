@@ -10,7 +10,7 @@ export const CANVAS_WIDTH = canvas.width;
 export const CANVAS_HEIGHT = canvas.height;
 
 // --- Configurações do Jogo ---
-export const GRID_SIZE = 32;  
+export const GRID_SIZE = 32;  
 
 // --- Configurações de Sprite (ATUALIZADO PARA 16x34) ---
 export const SPRITE_WIDTH = 16;

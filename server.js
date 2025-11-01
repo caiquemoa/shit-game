@@ -58,6 +58,15 @@ io.on('connection', (socket) => {
         socket.emit('gameStateUpdate', gameEngine.getGameState());
     });
     
+    // NOVOS: Handlers para ataques
+    socket.on('pierce', () => {
+        gameEngine.performPierce(socket.id);
+    });
+    
+    socket.on('slice', () => {
+        gameEngine.performSlice(socket.id);
+    });
+    
     socket.on('input', (inputData) => {
         const player = gameEngine.getPlayer(socket.id);
         if (player) {

@@ -36,12 +36,12 @@ function findEmptyPosition() {
     return found ? { x, y } : { x: 48, y: 64 }; // Fallback
 }
 
-// Cria um novo jogador (MODIFICADO para aceitar 'name')
+// Cria um novo jogador
 exports.createNewPlayer = function(id, name) {
     const { x, y } = findEmptyPosition();
     return {
         id: id,
-        name: name, // <-- NOVO
+        name: name,
         x: x, 
         y: y, 
         color: getRandomColor(),
@@ -51,11 +51,12 @@ exports.createNewPlayer = function(id, name) {
         aimAngle: 0, 
         isAttacking: false, 
         lastShotTime: 0,
+        lastAttackTime: 0,
         flashRedUntil: 0,
         state: 'idle', 
         direction: 'down', 
         frame: 0, 
-        lastFrameTime: Date.now() 
+        lastFrameTime: Date.now()
     };
 };
 
@@ -64,14 +65,12 @@ exports.createProjectile = function(shooterId) {
     const shooter = players[shooterId];
     if (!shooter) return;
 
-    // Checagem de Cooldown
     const currentTime = Date.now();
     if (currentTime - shooter.lastShotTime < SHOT_COOLDOWN) return;
 
     const dx = Math.cos(shooter.aimAngle) * PROJECTILE_SPEED;
     const dy = Math.sin(shooter.aimAngle) * PROJECTILE_SPEED;
 
-    // O projétil se origina do CENTRO VISUAL do jogador
     const startX = shooter.x;
     const startY = shooter.y - (PLAYER_SPRITE_HEIGHT / 2); 
 
@@ -90,6 +89,57 @@ exports.createProjectile = function(shooterId) {
     setTimeout(() => { shooter.isAttacking = false; }, 100);
 };
 
+// Funções para ataques melee (usa aimAngle apenas para direção do ataque, não afeta walk/idle)
+exports.performPierce = function(id) {
+    const player = players[id];
+    if (!player) return;
+
+    const currentTime = Date.now();
+    if (currentTime - (player.lastAttackTime || 0) < 1000) return;
+
+    // Direção baseada em aimAngle (mouse) apenas para o ataque
+    const angle = player.aimAngle || 0;
+    const absCos = Math.abs(Math.cos(angle));
+    const absSin = Math.abs(Math.sin(angle));
+    if (absSin > absCos) {
+        player.direction = Math.sin(angle) > 0 ? 'down' : 'up';
+    } else {
+        player.direction = Math.cos(angle) >= 0 ? 'side_right' : 'side_left';
+    }
+    player.state = 'pierce';
+    player.isAttacking = true;
+    player.frame = 0;
+    player.lastFrameTime = currentTime;
+    player.lastAttackTime = currentTime;
+};
+
+exports.performSlice = function(id) {
+    const player = players[id];
+    if (!player) return;
+
+    const currentTime = Date.now();
+    if (currentTime - (player.lastAttackTime || 0) < 1000) return;
+
+    // Para slice, usa direção atual do player se side; senão aimAngle
+    let useDir = player.direction;
+    if (useDir !== 'side_right' && useDir !== 'side_left') {
+        const angle = player.aimAngle || 0;
+        const absCos = Math.abs(Math.cos(angle));
+        const absSin = Math.abs(Math.sin(angle));
+        if (absSin > absCos) {
+            useDir = Math.sin(angle) > 0 ? 'down' : 'up';
+        } else {
+            useDir = Math.cos(angle) >= 0 ? 'side_right' : 'side_left';
+        }
+    }
+    player.direction = useDir;
+    player.state = 'slice';
+    player.isAttacking = true;
+    player.frame = 0;
+    player.lastFrameTime = currentTime;
+    player.lastAttackTime = currentTime;
+};
+
 // --- Funções de Getters e Setters ---
 exports.getGameState = function() {
     return { 
@@ -101,7 +151,6 @@ exports.getGameState = function() {
     };
 };
 
-// MODIFICADO para aceitar 'name'
 exports.addPlayer = function(id, name) {
     players[id] = exports.createNewPlayer(id, name);
 };
@@ -123,40 +172,70 @@ exports.serverGameLoop = function(io) {
     // Atualiza Jogadores
     for (const id in players) {
         const player = players[id];
+        if (!player) continue;
+        
+        const previousState = player.state; // Para detectar mudança e resetar frame
         
         // 1. Processa o movimento
         let dx = 0;
         let dy = 0;
+        const input = player.input || {}; // Fallback para input undefined
 
-        if (player.input.ArrowUp) dy -= player.speed;
-        if (player.input.ArrowDown) dy += player.speed;
-        if (player.input.ArrowLeft) dx -= player.speed;
-        if (player.input.ArrowRight) dx += player.speed;
+        if (input.ArrowUp) dy -= player.speed;
+        if (input.ArrowDown) dy += player.speed;
+        if (input.ArrowLeft) dx -= player.speed;
+        if (input.ArrowRight) dx += player.speed;
 
-        // Normaliza o movimento diagonal
+        // Normaliza diagonal
         if (dx !== 0 && dy !== 0) {
             const magnitude = Math.sqrt(dx * dx + dy * dy);
             dx = (dx / magnitude) * player.speed;
             dy = (dy / magnitude) * player.speed;
         }
 
-        // 2. Lógica de Estado e Animação
         let isMoving = dx !== 0 || dy !== 0;
-        player.state = isMoving ? 'walk' : 'idle';
+        let targetState = isMoving ? 'walk' : 'idle';
         
-        if (dy > 0) { player.direction = 'down'; }
-        else if (dy < 0) { player.direction = 'up'; }
-        else if (dx > 0) { player.direction = 'side_right'; }
-        else if (dx < 0) { player.direction = 'side_left'; }
+        // 2. Reset de ataque se duração acabou (aplica targetState imediatamente)
+        const attackDuration = 500;
+        if ((player.state === 'pierce' || player.state === 'slice') && currentTime - player.lastAttackTime > attackDuration) {
+            player.state = targetState;
+            player.isAttacking = false;
+        }
+        
+        // Durante ataque, NÃO muda estado ou direção (isola aimAngle)
+        if (player.state !== 'pierce' && player.state !== 'slice') {
+            player.state = targetState; // Força update para walk/idle se moving
+            // Direção baseada apenas em input (não aimAngle)
+            if (dy > 0) { player.direction = 'down'; }
+            else if (dy < 0) { player.direction = 'up'; }
+            else if (dx > 0) { player.direction = 'side_right'; }
+            else if (dx < 0) { player.direction = 'side_left'; }
+        }
 
-        let frameDuration = (player.state === 'walk') ? FRAME_DURATION_WALK : FRAME_DURATION_IDLE;
-        let maxFrames = (player.state === 'walk') ? MAX_FRAMES_WALK : MAX_FRAMES_IDLE; 
+        // Detecta mudança de estado e reseta frame/tempo (corrige travamento idle/walk)
+        if (player.state !== previousState) {
+            player.frame = 0;
+            player.lastFrameTime = currentTime;
+        }
+
+        // Animação de frames
+        let frameDuration = FRAME_DURATION_WALK;
+        let maxFrames = MAX_FRAMES_WALK;
+        if (player.state === 'idle') {
+            frameDuration = FRAME_DURATION_IDLE;
+            maxFrames = MAX_FRAMES_IDLE;
+        } else if (player.state === 'pierce' || player.state === 'slice') {
+            frameDuration = 125;
+            maxFrames = 8; // 8 frames para ataques
+        }
+        
         if (currentTime > player.lastFrameTime + frameDuration) {
             player.frame = (player.frame + 1) % maxFrames;
             player.lastFrameTime = currentTime;
         }
         
-        // 3. Colisão (Slide)
+        // 3. Aplica movimento
         let newX = player.x + dx;
         if (!isCollidingWithMap(newX, player.y)) {
             player.x = newX;
@@ -166,20 +245,35 @@ exports.serverGameLoop = function(io) {
             player.y = newY;
         }
 
-        // 4. Checagem de Morte
+        // 4. Dano de ataque (mantido simples)
+        if (player.isAttacking && player.frame === 1 && (player.state === 'pierce' || player.state === 'slice')) {
+            const attackRange = 80;
+            for (const otherId in players) {
+                if (otherId === id) continue;
+                const other = players[otherId];
+                const distX = other.x - player.x;
+                const distY = (other.y - PLAYER_SPRITE_HEIGHT / 2) - (player.y - PLAYER_SPRITE_HEIGHT / 2);
+                const dist = Math.sqrt(distX * distX + distY * distY);
+                if (dist < attackRange) {
+                    other.health -= DAMAGE_PER_HIT * 2;
+                    other.flashRedUntil = currentTime + 500;
+                }
+            }
+        }
+
+        // 5. Checagem de Morte
         if (player.health <= 0) {
             exports.removePlayer(id);
             io.to(id).emit('gameOver'); 
         }
     }
 
-    // Atualiza projéteis
+    // Atualiza projéteis (mantido igual)
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const proj = projectiles[i];
         proj.x += proj.dx;
         proj.y += proj.dy;
 
-        // 1. Colisão com Paredes
         const gridX = Math.floor(proj.x / GRID_SIZE);
         const gridY = Math.floor(proj.y / GRID_SIZE);
 
@@ -195,12 +289,10 @@ exports.serverGameLoop = function(io) {
             continue;
         }
 
-        // 2. Checa colisão com players
         for (const id in players) {
             const player = players[id];
             if (id === proj.shooterId) continue; 
 
-            // Calcula a distância do projétil ao CENTRO VISUAL do jogador
             const playerCenterX = player.x;
             const playerCenterY = player.y - (PLAYER_SPRITE_HEIGHT / 2);
             
