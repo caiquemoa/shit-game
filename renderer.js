@@ -13,55 +13,31 @@ import { localAimAngle } from './inputHandler.js';
 let CALIBRATION_DATA = {
     // PIERCE - Calibração de Sprites e Hitboxes
     'PIERCE_SIDE': {
-        WIDTH: 64, // Largura do frame
-        HEIGHT: 64, // Altura do frame
-        OFFSET_X: -32, // Offset Horizontal (posição X do canto superior esquerdo do frame em relação ao pivô)
-        OFFSET_Y: -64, // Offset Vertical (posição Y do canto superior esquerdo do frame em relação ao pivô)
         BLEED_CUT: 4, // Corte (em pixels) para vazamentos/ghosts no flip lateral
         FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
         LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
     'PIERCE_UP': {
-        WIDTH: 64,
-        HEIGHT: 128,
-        OFFSET_X: -32,
-        OFFSET_Y: -128,
         BLEED_CUT: 0, // Corte (em pixels) para vazamentos/ghosts (geralmente 0 para UP)
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
     'PIERCE_DOWN': {
-        WIDTH: 64,
-        HEIGHT: 128,
-        OFFSET_X: -32,
-        OFFSET_Y: -128,
         BLEED_CUT: 4, // Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
     // SLICE - Calibração de Sprites e Hitboxes
     'SLICE_SIDE': {
-        WIDTH: 64,
-        HEIGHT: 64,
-        OFFSET_X: -32,
-        OFFSET_Y: -64,
         BLEED_CUT: 4,
         FLIP_OVERRIDE: false, // Desativa o espelhamento automático se TRUE.
         LEFT_OFFSET_X: 0, // Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
     'SLICE_UP': {
-        WIDTH: 64,
-        HEIGHT: 128,
-        OFFSET_X: -32,
-        OFFSET_Y: -128,
         BLEED_CUT: 0,
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
     'SLICE_DOWN': {
-        WIDTH: 64,
-        HEIGHT: 128,
-        OFFSET_X: -32,
-        OFFSET_Y: -128,
         BLEED_CUT: 4,
         CUT_ALIGNMENT: 'START', // Posição do corte (START: Esquerda/Cima, END: Direita/Baixo)
     },
@@ -79,8 +55,8 @@ let CALIBRATION_DATA = {
         CAMERA_LERP_ATTACK: 0.25, // Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)
         CAMERA_LERP_IDLE: 0.1, // Lerp em idle/walk
         BAR_WIDTH: 20, // Largura barra vida (fixa)
-        BAR_Y_OFFSET: -37, // Posição Y barra (acima body: -SPRITE_HEIGHT - 5, usando 32)
-        MIRA_Y_OFFSET: -16 // Posição Y mira (centro base: -SPRITE_HEIGHT / 2, usando 32)
+        BAR_Y_OFFSET: -37, // Posição Y barra (acima body: -32 -5)
+        MIRA_Y_OFFSET: -16 // Posição Y mira (centro base: -16)
     }
 };
 // --- CALIBRATION END ---
@@ -158,8 +134,11 @@ window.addEventListener("DevModeConfigChanged", (ev) => {
 function getAnimationConfig(player, aimAngle = 0) {
     const state = player.state || 'idle';
     const direction = player.direction || 'down';
-    let imgKey, frameKey, w, h, offsetX, offsetY, flip, bleedCut;
+    let imgKey, frameKey, flip;
+    let bleedCut = 0;
     let cutAlignment = 'START'; // Default
+    let flipOverride = false;
+    let leftOffsetX = 0;
 
     if (state === 'pierce' || state === 'slice') {
         const attackType = state === 'pierce' ? 'PIERCE' : 'SLICE';
@@ -179,37 +158,35 @@ function getAnimationConfig(player, aimAngle = 0) {
         const config = CALIBRATION_DATA[configKey] || {};
 
         frameKey = configKey;
-        w = config.WIDTH || 64;
-        h = config.HEIGHT || 64;
         bleedCut = config.BLEED_CUT || 0;
         cutAlignment = config.CUT_ALIGNMENT || 'START';
 
         // Lógica de FLIP e OFFSET X
-        const flipOverride = config.FLIP_OVERRIDE === true;
-        const leftOffsetX = config.LEFT_OFFSET_X || 0;
+        flipOverride = config.FLIP_OVERRIDE === true;
+        leftOffsetX = config.LEFT_OFFSET_X || 0;
         const facingLeft = Math.cos(aimAngle) < 0;
 
         if (configKey.includes('_SIDE')) {
             if (flipOverride) {
-                // Desativa espelhamento automático, usa offset para left
-                flip = false;
-                if (facingLeft) {
-                    offsetX = (config.OFFSET_X || -w / 2) + leftOffsetX;
+                // Tenta usar _LEFT se existir
+                const leftKey = configKey + '_LEFT';
+                if (SPRITE_FRAMES_DATA[leftKey] && facingLeft) {
+                    frameKey = leftKey;
+                    flip = false;
+                } else if (facingLeft) {
+                    // Se não existir _LEFT, usa normal sem flip, mas aplica leftOffsetX depois
+                    flip = false;
                 } else {
-                    offsetX = config.OFFSET_X || -w / 2;
+                    flip = false;
                 }
             } else {
                 // Usa espelhamento automático (o que o usuário diz que não funciona, mas é o padrão)
                 flip = facingLeft;
-                offsetX = config.OFFSET_X || -w / 2;
             }
         } else {
             // UP/DOWN attacks: no flip
             flip = false;
-            offsetX = config.OFFSET_X || -w / 2;
         }
-        
-        offsetY = config.OFFSET_Y || -h;
 
     } else {
         // Walk/idle: dims originais
@@ -217,33 +194,24 @@ function getAnimationConfig(player, aimAngle = 0) {
         const dirName = direction === 'side_right' || direction === 'side_left' ? 'Side' : direction.charAt(0).toUpperCase() + direction.slice(1);
         imgKey = `${animName}_${dirName}`;
         frameKey = `${state.toUpperCase()}_${dirName.toUpperCase().replace('SIDE_', 'SIDE')}`;
-        w = SPRITE_WIDTH;
-        h = SPRITE_HEIGHT;
-        offsetY = -h;
-        bleedCut = 0; // Não usado em base
-        cutAlignment = 'START'; // Default para base sprites
 
         // Lógica de FLIP e OFFSET X para base
         const isSide = direction === 'side_right' || direction === 'side_left';
         const sideConfig = CALIBRATION_DATA[frameKey] || {}; // Usa o config (se existir)
         
-        const flipOverride = sideConfig.FLIP_OVERRIDE === true;
-        const leftOffsetX = sideConfig.LEFT_OFFSET_X || 0;
+        flipOverride = sideConfig.FLIP_OVERRIDE === true;
+        leftOffsetX = sideConfig.LEFT_OFFSET_X || 0;
         
         flip = direction === 'side_left'; // flip automático
-        offsetX = -w / 2; // offsetX padrão
 
         if (isSide && flipOverride) {
             // Desativa espelhamento automático, usa offset para left
             flip = false;
-            if (direction === 'side_left') {
-                offsetX += leftOffsetX;
-            }
         }
         // else: usa o flip automático padrão
     }
 
-    return { image: spriteImages[imgKey], frameKey, w, h, offsetX, offsetY, flip, bleedCut, cutAlignment };
+    return { image: spriteImages[imgKey], frameKey, flip, bleedCut, cutAlignment, flipOverride, leftOffsetX };
 }
 
 // Desenha ANIMAÇÃO (ÚLTIMA, ACIMA – PIVOT CORRETO)
@@ -251,14 +219,32 @@ function drawAttackAnimation(player, aimAngle) {
     if (player.state !== 'pierce' && player.state !== 'slice') return;
 
     const config = getAnimationConfig(player, aimAngle);
-    const { image, frameKey, w, h, offsetX, offsetY, flip, bleedCut, cutAlignment } = config;
+    const { image, frameKey, flip, bleedCut, cutAlignment, flipOverride, leftOffsetX } = config;
 
     if (!image || !image.complete) return;
 
     const frameCoords = SPRITE_FRAMES_DATA[frameKey];
     if (!frameCoords || frameCoords.length === 0) return;
 
-    const [srcX, srcY] = frameCoords[player.frame % frameCoords.length];
+    const frameIndex = player.frame % frameCoords.length;
+    const frame = frameCoords[frameIndex];
+    let srcX, srcY, w, h, frameOffX = 0, frameOffY = 0;
+
+    if (frame.length > 2) {
+        [srcX, srcY, w, h, frameOffX, frameOffY] = frame;
+    } else {
+        [srcX, srcY] = frame;
+        w = 64; // Fallback (não deve ocorrer para attacks)
+        h = 64;
+    }
+
+    let drawOffsetX = -w / 2 + frameOffX;
+    let drawOffsetY = -h + frameOffY;
+
+    const facingLeft = Math.cos(aimAngle) < 0;
+    if (flipOverride && facingLeft && !frameKey.endsWith('_LEFT')) {
+        drawOffsetX += leftOffsetX;
+    }
 
     ctx.save();
     
@@ -275,8 +261,8 @@ function drawAttackAnimation(player, aimAngle) {
         // Se 'END', sourceSrcX permanece srcX (corta da Direita)
         
         // Ponto de pivô para o flip é o centro horizontal da imagem
-        const centerX = offsetX + w / 2;
-        const centerY = offsetY + h / 2;
+        const centerX = drawOffsetX + w / 2;
+        const centerY = drawOffsetY + h / 2;
 
         ctx.translate(centerX, centerY);
         ctx.scale(-1, 1);
@@ -305,11 +291,11 @@ function drawAttackAnimation(player, aimAngle) {
             } // Se 'END', corta de 'END' (Bottom) (sourceSrcY = srcY)
         }
 
-        ctx.drawImage(image, sourceSrcX, sourceSrcY, sourceW, sourceH, offsetX, offsetY, w, h);
+        ctx.drawImage(image, sourceSrcX, sourceSrcY, sourceW, sourceH, drawOffsetX, drawOffsetY, w, h);
 
     } else {
         // Full draw (ou padrão sem corte/flip)
-        ctx.drawImage(image, srcX, srcY, w, h, offsetX, offsetY, w, h);
+        ctx.drawImage(image, srcX, srcY, w, h, drawOffsetX, drawOffsetY, w, h);
     }
     ctx.restore();
 }
@@ -319,25 +305,44 @@ function drawBaseSprite(player) {
     if (player.state === 'pierce' || player.state === 'slice') return; // Skip base durante ataque
 
     const config = getAnimationConfig(player, 0); // Config de base não usa aimAngle
-    const { image, frameKey, w, h, offsetX, offsetY, flip } = config;
+    const { image, frameKey, flip, flipOverride, leftOffsetX } = config;
 
     if (!image || !image.complete) return;
 
     const frameCoords = SPRITE_FRAMES_DATA[frameKey];
     if (!frameCoords || frameCoords.length === 0) return;
 
-    const [srcX, srcY] = frameCoords[player.frame % frameCoords.length];
+    const frameIndex = player.frame % frameCoords.length;
+    const frame = frameCoords[frameIndex];
+    let srcX, srcY, w = SPRITE_WIDTH, h = SPRITE_HEIGHT, frameOffX = 0, frameOffY = 0;
+
+    if (frame.length > 2) {
+        [srcX, srcY, w, h, frameOffX, frameOffY] = frame;
+    } else {
+        [srcX, srcY] = frame;
+    }
+
+    let drawOffsetX = -w / 2 + frameOffX;
+    let drawOffsetY = -h + frameOffY;
+
+    const direction = player.direction || 'down';
+    const isSide = direction === 'side_right' || direction === 'side_left';
+    const facingLeft = direction === 'side_left';
+
+    if (isSide && flipOverride && facingLeft) {
+        drawOffsetX += leftOffsetX;
+    }
 
     ctx.save();
-    const centerX = offsetX + w / 2; // Centralizado horizontalmente
-    const centerY = offsetY + h / 2; // Centro da altura da base
+    const centerX = drawOffsetX + w / 2; // Centralizado horizontalmente
+    const centerY = drawOffsetY + h / 2; // Centro da altura da base
 
     if (flip) {
         ctx.translate(centerX, centerY);
         ctx.scale(-1, 1);
         ctx.drawImage(image, srcX, srcY, w, h, -w / 2, -h / 2, w, h);
     } else {
-        ctx.drawImage(image, srcX, srcY, w, h, offsetX, offsetY, w, h);
+        ctx.drawImage(image, srcX, srcY, w, h, drawOffsetX, drawOffsetY, w, h);
     }
     ctx.restore();
 }
@@ -374,7 +379,33 @@ function drawPlayers() {
         const player = players[id];
         const aimAngle = player.aimAngle || localAimAngle || 0;
         const config = getAnimationConfig(player, aimAngle);
-        const { w: visualW, h: visualH, offsetX: visualOffsetX, offsetY: visualOffsetY } = config; // Usa os offsets calculados (que podem ter LEFT_OFFSET_X)
+
+        let visualW = SPRITE_WIDTH;
+        let visualH = SPRITE_HEIGHT;
+        let visualOffsetX = -SPRITE_WIDTH / 2;
+        let visualOffsetY = -SPRITE_HEIGHT;
+
+        // Para devmode boundaries, usa dims do frame atual (se attack)
+        if (player.state === 'pierce' || player.state === 'slice') {
+            const frameCoords = SPRITE_FRAMES_DATA[config.frameKey];
+            if (frameCoords) {
+                const frame = frameCoords[player.frame % frameCoords.length];
+                if (frame.length > 2) {
+                    [, , visualW, visualH] = frame;
+                }
+                const facingLeft = Math.cos(aimAngle) < 0;
+                let frameOffX = 0;
+                let frameOffY = 0;
+                if (frame.length > 4) {
+                    [, , , , frameOffX, frameOffY] = frame; // Destruturação completa para evitar índice errado
+                }
+                visualOffsetX = -visualW / 2 + frameOffX;
+                visualOffsetY = -visualH + frameOffY;
+                if (config.flipOverride && facingLeft && !config.frameKey.endsWith('_LEFT')) {
+                    visualOffsetX += config.leftOffsetX;
+                }
+            }
+        }
 
         ctx.save();
         ctx.translate(player.x, player.y);

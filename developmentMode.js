@@ -19,7 +19,7 @@
     'GENERAL' // Grupo para ajustes globais/câmera
   ];
   // ANIMATION_PROPS inclui todos os campos possíveis para ataques
-  const ANIMATION_PROPS = ['WIDTH', 'HEIGHT', 'OFFSET_X', 'OFFSET_Y', 'BLEED_CUT', 'FLIP_OVERRIDE', 'LEFT_OFFSET_X', 'CUT_ALIGNMENT']; 
+  const ANIMATION_PROPS = ['BLEED_CUT', 'FLIP_OVERRIDE', 'LEFT_OFFSET_X', 'CUT_ALIGNMENT']; 
   const GENERAL_PROPS = ['CAMERA_LERP_ATTACK', 'CAMERA_LERP_IDLE', 'BAR_WIDTH', 'BAR_Y_OFFSET', 'MIRA_Y_OFFSET'];
 
   let buffer = "";
@@ -147,11 +147,11 @@
           // Mostra apenas FLIP_OVERRIDE e LEFT_OFFSET_X para base side
           props = ['FLIP_OVERRIDE', 'LEFT_OFFSET_X'];
       } else if (groupKey.includes('_SIDE')) {
-          // Attack side groups: todas as props de side (WIDTH, HEIGHT, OFFSET_X, OFFSET_Y, BLEED_CUT, FLIP_OVERRIDE, LEFT_OFFSET_X, CUT_ALIGNMENT)
+          // Attack side groups: todas as props de side (BLEED_CUT, FLIP_OVERRIDE, LEFT_OFFSET_X, CUT_ALIGNMENT)
           props = ANIMATION_PROPS;
       } else { 
-          // UP/DOWN attack groups: todas as props, exceto FLIP/LEFT_OFFSET
-          props = ['WIDTH', 'HEIGHT', 'OFFSET_X', 'OFFSET_Y', 'BLEED_CUT', 'CUT_ALIGNMENT'];
+          // UP/DOWN attack groups: BLEED_CUT, CUT_ALIGNMENT
+          props = ['BLEED_CUT', 'CUT_ALIGNMENT'];
       }
 
       props.forEach(k => {
@@ -249,7 +249,6 @@
 
   function defaultForKey(group, k) { 
     // Usamos os valores padrão que o Dev Mode deve fornecer, alinhados com renderer.js
-    const SPRITE_HEIGHT = 32; 
     
     if (k === 'FLIP_OVERRIDE') return false;
     if (k === 'LEFT_OFFSET_X') return 0;
@@ -261,20 +260,7 @@
         if (/LERP|CAMERA/i.test(k)) return 0.25; 
         if (k === "BAR_WIDTH") return 20;
     } else {
-        // Defaults para WIDTH, HEIGHT, OFFSET_X, OFFSET_Y, BLEED_CUT
-        if (/WIDTH|HEIGHT/i.test(k)) {
-            // PIERCE/SLICE UP e DOWN usam HEIGHT 128, WIDTH 64
-            if (group.includes('UP') || group.includes('DOWN')) {
-                 return (k === 'HEIGHT' ? 128 : 64);
-            }
-            return 64; // SIDE usa 64x64
-        }
-        if (k === "OFFSET_X") return -32;
-        if (k === "OFFSET_Y") {
-            // OFFSET_Y é igual a -HEIGHT do grupo
-            return group.includes('UP') || group.includes('DOWN') ? -128 : -64;
-        }
-        // BLEED_CUT default: 4 para SIDE/DOWN, 0 para UP
+        // Defaults para BLEED_CUT
         if (k === "BLEED_CUT") return group.includes('UP') ? 0 : 4; 
     }
     return 0; // Default fallback
@@ -336,7 +322,7 @@
         } else if (group.includes('_SIDE')) {
             props = ANIMATION_PROPS;
         } else {
-            props = ['WIDTH', 'HEIGHT', 'OFFSET_X', 'OFFSET_Y', 'BLEED_CUT', 'CUT_ALIGNMENT'];
+            props = ['BLEED_CUT', 'CUT_ALIGNMENT'];
         }
 
         // Comentário para o grupo
@@ -349,7 +335,6 @@
         lines.push(`    '${group}': {`);
         
         props.forEach(k => {
-            const SPRITE_HEIGHT = 32;
             let val = groupData[k] !== undefined ? groupData[k] : defaultForKey(group, k);
             
             const isFloat = /LERP|CAMERA|MIRA|LEFT_OFFSET_X/i.test(k);
@@ -370,15 +355,11 @@
                     case "CAMERA_LERP_ATTACK": comment = 'Velocidade lerp câmera em ataques (aumente para menos lag/pulinho)'; break;
                     case "CAMERA_LERP_IDLE": comment = 'Lerp em idle/walk'; break;
                     case "BAR_WIDTH": comment = 'Largura barra vida (fixa)'; break;
-                    case "BAR_Y_OFFSET": comment = `Posição Y barra (acima body: -SPRITE_HEIGHT - 5, usando ${SPRITE_HEIGHT})`; break;
-                    case "MIRA_Y_OFFSET": comment = `Posição Y mira (centro base: -SPRITE_HEIGHT / 2, usando ${SPRITE_HEIGHT})`; break;
+                    case "BAR_Y_OFFSET": comment = 'Posição Y barra (acima body: -32 -5)'; break;
+                    case "MIRA_Y_OFFSET": comment = 'Posição Y mira (centro base: -16)'; break;
                 }
             } else {
                 switch(k) {
-                    case "WIDTH": comment = 'Largura do frame'; break;
-                    case "HEIGHT": comment = 'Altura do frame'; break;
-                    case "OFFSET_X": comment = 'Offset Horizontal (posição X do canto superior esquerdo do frame em relação ao pivô)'; break;
-                    case "OFFSET_Y": comment = 'Offset Vertical (posição Y do canto superior esquerdo do frame em relação ao pivô)'; break;
                     case "BLEED_CUT": comment = (group.includes('SIDE') ? 'Corte (em pixels) para vazamentos/ghosts no flip lateral' : (group.includes('DOWN') ? 'Corte (em pixels) para vazamentos/ghosts no bottom (perna residual)' : 'Corte (em pixels) para vazamentos/ghosts (geralmente 0 para UP)')); break;
                     case "FLIP_OVERRIDE": comment = 'Desativa o espelhamento automático se TRUE.'; break;
                     case "LEFT_OFFSET_X": comment = 'Offset X aplicado se FLIP_OVERRIDE for TRUE e estiver virado para a esquerda.'; break;
